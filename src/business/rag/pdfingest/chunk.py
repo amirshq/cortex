@@ -56,6 +56,8 @@ class Chunker:
                 metadata = {**source_metadata,"chunk_start": start,"chunk_end": end,"chunk_strategy": self.strategy_name,}
                 chunks.append(Chunk(chunk_id=chunk_id,text=chunk_text,metadata=metadata,))
             start = end - self.overlap
+            if end >= text_length:
+                break
         return chunks
     def _build_chunk_id(self,chunk_text: str,start: int,source_metadata: Dict,) -> str:
         """

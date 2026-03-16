@@ -1,3 +1,5 @@
+# No specific long‑term memory service is hard‑coded in long_term_memory.py.
+# Replace it with Letta Long Term Memory or Langchain long term memory
 from typing import List, Dict, TYPE_CHECKING
 from datetime import datetime
 

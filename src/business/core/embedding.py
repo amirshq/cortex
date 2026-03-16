@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import time
 from abc import ABC, abstractmethod
 from typing import List
 
 from openai import OpenAI
+from openai import InternalServerError
 
 
 class Embedder(ABC):
@@ -34,9 +36,21 @@ class OpenAIEmbedder(Embedder):
         self.client = OpenAI(api_key=api_key)
         self.model = model
 
-    def _embed(self, inputs: List[str]) -> List[List[float]]:
-        res = self.client.embeddings.create(model=self.model, input=inputs)
-        return [item.embedding for item in res.data]
+    def _embed(self, inputs: List[str], max_retries: int = 5) -> List[List[float]]:
+        last_err = None
+        for attempt in range(max_retries):
+            try:
+                res = self.client.embeddings.create(model=self.model, input=inputs)
+                return [item.embedding for item in res.data]
+            except InternalServerError as e:
+                last_err = e
+                if attempt < max_retries - 1:
+                    delay = 2 ** attempt
+                    time.sleep(delay)
+                    print(f"⚠️  OpenAI 500 error, retrying in {delay}s (attempt {attempt + 2}/{max_retries})...", flush=True)
+                else:
+                    raise last_err from None
+        raise last_err from None
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         if not texts:

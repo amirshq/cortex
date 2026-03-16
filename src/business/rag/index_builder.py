@@ -36,6 +36,7 @@ def build_index(
     persist_dir: Path,
     max_context_chars: int = 12_000,
     include_table_images: bool = True,
+    pdf_strategy: str = "hi_res",
     chunk_size: int = 800,
     overlap: int = 100,
     top_k_store: int | None = None,
@@ -53,14 +54,16 @@ def build_index(
         data_dir=data_dir,
         max_context_chars=max_context_chars,
         include_table_images=include_table_images,
+        pdf_strategy=pdf_strategy,
     )
+    print(f"📄 Chunking {len(docs)} document(s)...", flush=True)
 
     embedder = OpenAIEmbedder(api_key=api_key)
-    vstore = VectorStore(persist_dir=str(persist_dir))
     chunker = Chunker(chunk_size=chunk_size, overlap=overlap)
 
     all_chunks: List[Chunk] = []
     for doc in docs:
+        print(f"  Chunking doc: {doc.source_id} ({len(doc.combined_text)} chars)...", flush=True)
         # use marker to identify start of table section
         table_marker = None
         if doc.table_text:
@@ -75,12 +78,24 @@ def build_index(
     if top_k_store:
         all_chunks = all_chunks[:top_k_store]
 
-    texts = [c.text for c in all_chunks]
-    embeddings = embedder.embed_documents(texts)
-    ids = [c.chunk_id for c in all_chunks]
-    metadatas = [c.metadata for c in all_chunks]
+    print(f"✅ Chunking complete: {len(all_chunks)} chunk(s)", flush=True)
 
-    #This line is the main indexing operation
-    vstore.upsert(ids=ids, embeddings=embeddings, metadatas=metadatas, documents=texts)
+    # Process in batches to avoid OOM when embedding/upserting many chunks
+    batch_size = 50
+    total_batches = (len(all_chunks) + batch_size - 1) // batch_size
+    vstore = None
+    for i in range(0, len(all_chunks), batch_size):
+        batch_num = i // batch_size + 1
+        print(f"📤 Embedding batch {batch_num}/{total_batches}...", flush=True)
+        batch = all_chunks[i : i + batch_size]
+        texts = [c.text for c in batch]
+        embeddings = embedder.embed_documents(texts)
+        if vstore is None:
+            print("🔗 Connecting to ChromaDB...", flush=True)
+            vstore = VectorStore(persist_dir=str(persist_dir))
+        ids = [c.chunk_id for c in batch]
+        metadatas = [c.metadata for c in batch]
+        vstore.upsert(ids=ids, embeddings=embeddings, metadatas=metadatas, documents=texts)
+        print(f"✅ Batch {batch_num}/{total_batches} stored", flush=True)
 
     return len(docs), len(all_chunks)
