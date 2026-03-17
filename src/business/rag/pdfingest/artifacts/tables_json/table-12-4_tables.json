@@ -1,0 +1,16 @@
+[
+  {
+    "type": "Table",
+    "element_id": "c362ed617cd21a46747f384da64bfde7",
+    "text": "Cluster Heating Demand Data Centers Super-markets Water Bodies Total Allocation 1 (red) 1,672 0 24 100 124 2 (blue) 1,006 60 26 100 186 3 (green) 464 80 18 0 98 4 (purple) 557 20 23 0 43 558 60 50 800 910 5 (yellow) 6 (pink) 959 160 104 300 564 170 40 12 500 552 7 (mauve) 8 (grey) 155 0 9 700 709 635 20 16 500 536 9 (mauve) 10 (magenta) 1548 40 17 400 457 Totals 7,754 480 299 3,400 4,179",
+    "metadata": {
+      "text_as_html": "<table><thead><tr><th>Cluster</th><th>Heating Demand</th><th>Data Centers</th><th>Super-markets</th><th>Water Bodies</th><th>Total Allocation</th></tr></thead><tbody><tr><td>1 (red)</td><td>1,672</td><td>0</td><td>24</td><td>100</td><td>124</td></tr><tr><td>2 (blue)</td><td>1,006</td><td>60</td><td>26</td><td>100</td><td>186</td></tr><tr><td>3 (green)</td><td>464</td><td>80</td><td>18</td><td>0</td><td>98</td></tr><tr><td>4 (purple)</td><td>557</td><td>20</td><td>23</td><td>0</td><td>43</td></tr><tr><td>5 (yellow)</td><td>558</td><td>60</td><td>50</td><td>800</td><td>910</td></tr><tr><td>6 (pink)</td><td>959</td><td>160</td><td>104</td><td>300</td><td>564</td></tr><tr><td>7 (mauve)</td><td>170</td><td>40</td><td>12</td><td>500</td><td>552</td></tr><tr><td>8 (grey)</td><td>155</td><td>0</td><td>9</td><td>700</td><td>709</td></tr><tr><td>9 (mauve)</td><td>635</td><td>20</td><td>16</td><td>500</td><td>536</td></tr><tr><td>10 (magenta)</td><td>1548</td><td>40</td><td>17</td><td>400</td><td>457</td></tr><tr><td>Totals</td><td>7,754</td><td>480</td><td>299</td><td>3,400</td><td>4,179</td></tr></tbody></table>",
+      "filetype": "image/jpeg",
+      "languages": [
+        "eng"
+      ],
+      "page_number": 1,
+      "filename": "table-12-4.jpg"
+    }
+  }
+]
