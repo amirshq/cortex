@@ -87,6 +87,33 @@ class LongTermMemory:
         """
         self.vectordb.delete(filters={"user_id": user_id})
 
+    def remember_conversation(
+        self,
+        user_message: str,
+        assistant_response: str,
+        user_id: str,
+    ) -> None:
+        """
+        Store a single conversation turn (user + assistant exchange) as one atomic unit.
+
+        Skips chunking intentionally — conversation pairs are already small,
+        and splitting them would break their semantic coherence.
+        """
+        text = f"user: {user_message}\nassistant: {assistant_response}"
+        embedding = self.embedder.embed(text)
+
+        self.vectordb.add(
+            ids=[self._build_id(user_id)],
+            embeddings=[embedding],
+            documents=[text],
+            metadatas=[{
+                "user_id": user_id,
+                "type": "conversation",
+                "importance": 1,
+                "created_at": datetime.utcnow().isoformat(),
+            }],
+        )
+
     @staticmethod
     def _build_id(user_id: str) -> str:
         return f"{user_id}-{datetime.utcnow().timestamp()}"

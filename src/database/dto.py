@@ -144,4 +144,40 @@ from typing import Union
 ChatRequest = Union[StructuredQueryRequest, FreeFormQueryRequest, ChatMessageRequest]
 
 
+# ---------------------------------------------------------------------------
+# RAG DTOs
+# ---------------------------------------------------------------------------
+
+class RAGQueryRequest(BaseModel):
+    """Request DTO for RAG pipeline queries."""
+    question: str = Field(..., description="Natural-language question to answer from uploaded PDFs")
+
+    class Config:
+        json_schema_extra = {
+            "example": {"question": "What are the main findings in the document?"}
+        }
+
+
+class RAGQueryResponse(BaseModel):
+    """Response DTO for RAG pipeline answers."""
+    answer: str = Field(..., description="Generated answer from the RAG pipeline")
+    sources: List[dict] = Field(default_factory=list, description="Relevant source chunks used")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "answer": "The main findings are...",
+                "sources": [{"text": "...", "metadata": {}, "score": 0.87}],
+            }
+        }
+
+
+class RAGUploadResponse(BaseModel):
+    """Response DTO after uploading and indexing a PDF."""
+    filename: str
+    docs_indexed: int
+    chunks_indexed: int
+    message: str = "PDF indexed successfully"
+
+
 

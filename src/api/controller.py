@@ -1,12 +1,22 @@
-from fastapi import HTTPException, status
+import shutil
+from pathlib import Path
+
+from fastapi import HTTPException, UploadFile, status
 from typing import Optional
+
 from src.database.dto import (
     ChatMessageRequest,
     ChatMessageResponse,
     ChatHistoryRequest,
-    ChatHistoryResponse
+    ChatHistoryResponse,
+    RAGQueryRequest,
+    RAGQueryResponse,
+    RAGUploadResponse,
 )
 from src.business.chatbot import process_chat_message, get_chat_history
+from src.business.rag import query_rag, ingest_pdfs
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class ChatController:
@@ -99,6 +109,60 @@ class ChatController:
 
 # Create a singleton instance (optional, but convenient)
 chat_controller = ChatController()
+
+
+# ---------------------------------------------------------------------------
+# RAG Controller
+# ---------------------------------------------------------------------------
+
+class RAGController:
+    @staticmethod
+    async def query(request: RAGQueryRequest) -> RAGQueryResponse:
+        if not request.question or not request.question.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Question cannot be empty",
+            )
+        try:
+            result = await query_rag(request.question)
+            return RAGQueryResponse(answer=result["answer"], sources=result["sources"])
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"RAG query failed: {str(e)}",
+            )
+
+    @staticmethod
+    async def upload(file: UploadFile) -> RAGUploadResponse:
+        if not file.filename or not file.filename.lower().endswith(".pdf"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only PDF files are accepted",
+            )
+        try:
+            uploads_dir = _PROJECT_ROOT / "data" / "rag_uploads"
+            uploads_dir.mkdir(parents=True, exist_ok=True)
+
+            dest = uploads_dir / file.filename
+            with dest.open("wb") as f:
+                shutil.copyfileobj(file.file, f)
+
+            result = await ingest_pdfs(uploads_dir)
+            return RAGUploadResponse(
+                filename=file.filename,
+                docs_indexed=result["docs_indexed"],
+                chunks_indexed=result["chunks_indexed"],
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"PDF upload failed: {str(e)}",
+            )
+
+
+rag_controller = RAGController()
 
 
 

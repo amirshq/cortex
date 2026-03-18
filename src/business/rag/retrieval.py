@@ -39,6 +39,7 @@ class RAGPipeline:
         scorer = CrossEncoderReRanker(reranker_config or ReRankerConfig())
         self.reranker = ReRanker(scorer=scorer, config=reranker_config or ReRankerConfig())
 
+        self.reranker_config = reranker_config or ReRankerConfig()
         self.prompt_builder = PromptBuilder(system_prompt)
         self.llm = OpenAIModel(client=OpenAI(api_key=api_key), model_name=model_name, system_prompt=system_prompt)
 
@@ -61,17 +62,19 @@ class RAGPipeline:
             )
         return retrieved
 # The answer function is the orchestration of the RAG pipeline not just the retrieval step.
-    def answer(self, question: str) -> Tuple[str,list[ReRankedChunk]]:
-        # Step 1: Retrieve relevant chunks
-        retrieved_chunks = self._retrieve(question, top_k=self.reranker_config.initial_top_k)
-        
-        # Step 2: Re-rank the retrieved chunks
-        reranked_chunks = self.reranker.rerank(question, retrieved_chunks)
-        
-        # Step 3: Select context for prompting
-        selected_context = select_context(reranked_chunks, self.reranker_config.max_context_tokens, self.embedder.tokenizer)
-        
-        # Step 4: Generate answer using LLM
-        answer = self.llm.generate(question, [chunk.text for chunk in selected_context])
-        
-        return answer, selected_context
+    def answer(self, question: str) -> Tuple[str, List[ReRankedChunk]]:
+        # Step 1: Retrieve relevant chunks from vector store
+        retrieved_chunks = self._retrieve(question, top_k=self.reranker_config.top_k_input)
+
+        # Step 2: Re-rank and select context (orchestrator handles reranking internally)
+        selected_context, confidence = select_context(
+            query=question,
+            retrieved_chunks=retrieved_chunks,
+            reranker=self.reranker,
+            policy="hybrid",
+        )
+
+        # Step 3: Generate answer using LLM
+        answer_text = self.llm.generate(question, [chunk.text for chunk in selected_context])
+
+        return answer_text, selected_context

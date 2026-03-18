@@ -9,14 +9,17 @@ In Clean Architecture:
 The router is thin - it just defines routes and delegates to controllers.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from src.database.dto import (
     ChatMessageRequest,
     ChatMessageResponse,
     ChatHistoryRequest,
-    ChatHistoryResponse
+    ChatHistoryResponse,
+    RAGQueryRequest,
+    RAGQueryResponse,
+    RAGUploadResponse,
 )
-from src.api.controller import chat_controller
+from src.api.controller import chat_controller, rag_controller
 from src.api.ratelimiter import TokenBucket
 
 router = APIRouter()
@@ -61,25 +64,29 @@ async def chat_history_endpoint(
     limit: int = 50,
     offset: int = 0
 ):
-    """
-    Retrieve chat history for a user.
-    
-    Flow:
-    1. FastAPI extracts query parameters
-    2. Router creates ChatHistoryRequest DTO
-    3. Router delegates to controller
-    4. Returns ChatHistoryResponse
-    """
-    # Convert query params to DTO
     request = ChatHistoryRequest(
         user_id=user_id,
         session_id=session_id,
         limit=limit,
         offset=offset
     )
-    
-    # Delegate to controller
     return await chat_controller.get_chat_history(request)
+
+
+# ---------------------------------------------------------------------------
+# RAG endpoints
+# ---------------------------------------------------------------------------
+
+@router.post("/rag/query", response_model=RAGQueryResponse)
+async def rag_query_endpoint(request: RAGQueryRequest):
+    """Answer a question using the RAG pipeline over uploaded PDFs."""
+    return await rag_controller.query(request)
+
+
+@router.post("/rag/upload", response_model=RAGUploadResponse)
+async def rag_upload_endpoint(file: UploadFile = File(...)):
+    """Upload a PDF and (re-)build the RAG vector index."""
+    return await rag_controller.upload(file)
 
 
 # Example showing the difference:

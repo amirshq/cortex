@@ -2,6 +2,8 @@ import React, { useState, useCallback } from "react";
 import ChatWindow from "./components/ChatWindow.jsx";
 import InputBar from "./components/InputBar.jsx";
 import Sidebar from "./components/Sidebar.jsx";
+import ModeSelector from "./components/ModeSelector.jsx";
+import RAGPanel from "./components/RAGPanel.jsx";
 import { sendMessage } from "./api/chatApi.js";
 
 const USER_ID = 1;
@@ -21,6 +23,7 @@ function makeSession() {
 const initialSession = makeSession();
 
 export default function App() {
+  const [mode, setMode]           = useState("chatbot"); // "chatbot" | "rag"
   const [sessions, setSessions]   = useState([initialSession]);
   const [activeId, setActiveId]   = useState(initialSession.id);
   const [isTyping, setIsTyping]   = useState(false);
@@ -102,6 +105,11 @@ export default function App() {
     }
   }, [activeId, patchSession]);
 
+  const handleModeSelect = useCallback((newMode) => {
+    setMode(newMode);
+    setError(null);
+  }, []);
+
   // ── render ─────────────────────────────────────────────────────────────
   return (
     <div className="app">
@@ -109,31 +117,40 @@ export default function App() {
         <div className="header-inner">
           <div className="header-avatar">🤖</div>
           <div className="header-info">
-            <h1>{activeSession?.title || "Personal Chatbot"}</h1>
+            <h1>{mode === "rag" ? "RAG · PDF Q&A" : (activeSession?.title || "Personal Chatbot")}</h1>
             <div className="header-status">
               <span className="status-dot" />
               Online
             </div>
           </div>
+          <ModeSelector mode={mode} onSelect={handleModeSelect} />
         </div>
       </header>
 
       <div className="app-body">
-        <Sidebar
-          sessions={sessions}
-          activeId={activeId}
-          onSelect={handleSelect}
-          onNew={handleNew}
-          onDelete={handleDelete}
-        />
+        {mode === "chatbot" && (
+          <Sidebar
+            sessions={sessions}
+            activeId={activeId}
+            onSelect={handleSelect}
+            onNew={handleNew}
+            onDelete={handleDelete}
+          />
+        )}
 
         <main className="app-main">
-          <ChatWindow
-            messages={activeSession?.messages || []}
-            isTyping={isTyping}
-          />
-          {error && <p className="error-banner">{error}</p>}
-          <InputBar onSend={handleSend} disabled={isTyping} />
+          {mode === "chatbot" ? (
+            <>
+              <ChatWindow
+                messages={activeSession?.messages || []}
+                isTyping={isTyping}
+              />
+              {error && <p className="error-banner">{error}</p>}
+              <InputBar onSend={handleSend} disabled={isTyping} />
+            </>
+          ) : (
+            <RAGPanel />
+          )}
         </main>
       </div>
     </div>

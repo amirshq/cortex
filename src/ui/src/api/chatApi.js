@@ -49,3 +49,45 @@ export async function fetchHistory(userId, sessionId, limit = 50) {
 
   return res.json();
 }
+
+/**
+ * Upload a PDF file and trigger RAG indexing.
+ * @param {File} file
+ * @returns {Promise<{filename: string, docs_indexed: number, chunks_indexed: number, message: string}>}
+ */
+export async function uploadPdf(file) {
+  const form = new FormData();
+  form.append("file", file);
+
+  const res = await fetch(`${BASE}/rag/upload`, {
+    method: "POST",
+    body: form,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Ask a question using the RAG pipeline.
+ * @param {string} question
+ * @returns {Promise<{answer: string, sources: Array}>}
+ */
+export async function ragQuery(question) {
+  const res = await fetch(`${BASE}/rag/query`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+
+  return res.json();
+}
