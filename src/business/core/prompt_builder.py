@@ -1,4 +1,4 @@
-from typing import List
+from typing import Dict, List, Optional
 import yaml
 from pathlib import Path
 
@@ -71,4 +71,51 @@ class PromptBuilder:
     # Backwards compatibility
     def build_prompt(self, question: str, context: List[str]) -> str:
         return self.build_prompt_text(question, context)
-        
+
+
+def build_agentic_system_prompt(
+    user_info: Dict,
+    vector_results: Optional[List[Dict]] = None,
+    chat_summary: Optional[str] = None,
+) -> str:
+    """
+    Build the system prompt for the agentic chatbot (V3).
+
+    Injects user profile, an optional rolling summary, and semantically
+    retrieved past-conversation snippets so the model has rich context
+    without blowing up the context window with raw history.
+
+    Args:
+        user_info: Key/value pairs describing the user (name, preferences, etc.)
+        vector_results: Output of LongTermMemory.recall() — list of
+                        {"text": str, "metadata": dict, "score": float}
+        chat_summary: Optional condensed summary of the conversation so far.
+    """
+    user_block = "\n".join(f"  {k}: {v}" for k, v in user_info.items()) if user_info else "  (no user info)"
+
+    summary_block = chat_summary.strip() if chat_summary else "(no summary yet)"
+
+    if vector_results:
+        snippets = "\n\n".join(
+            f"[{i + 1}] {r['text']}" for i, r in enumerate(vector_results)
+        )
+    else:
+        snippets = "(no relevant past conversations found)"
+
+    return f"""You are a helpful, context-aware personal assistant.
+
+User profile:
+{user_block}
+
+Conversation summary so far:
+{summary_block}
+
+Relevant past conversations (semantic recall):
+{snippets}
+
+Instructions:
+- Use the user profile and past context to personalise your responses.
+- When you need to look up something from the user's history, call the
+  search_vector_db tool with a descriptive query.
+- Be concise and direct. Do not repeat context back to the user verbatim.
+- If you are uncertain, say so rather than inventing information."""

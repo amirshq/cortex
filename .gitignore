@@ -234,5 +234,12 @@ htmlcov/
 *.jpeg
 *.gif
 
-#JSON files 
-*.json
+# Node / frontend
+node_modules/
+src/ui/dist/
+src/ui/.vite/
+src/ui/node_modules/
+
+# Vite / build cache
+.vite/
+dist/

@@ -9,19 +9,31 @@ In Clean Architecture:
 The router is thin - it just defines routes and delegates to controllers.
 """
 
-from fastapi import APIRouter
-from src.data.dto import (
+from fastapi import APIRouter, Depends, HTTPException, status
+from src.database.dto import (
     ChatMessageRequest,
     ChatMessageResponse,
     ChatHistoryRequest,
     ChatHistoryResponse
 )
 from src.api.controller import chat_controller
+from src.api.ratelimiter import TokenBucket
 
 router = APIRouter()
 
+# One global bucket shared across all requests (10 req burst, 2 req/sec steady)
+_rate_limiter = TokenBucket(capacity=10, refill_rate=2.0)
 
-@router.post("/chat", response_model=ChatMessageResponse)
+
+def _check_rate_limit() -> None:
+    if not _rate_limiter.consume(1):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Rate limit exceeded. Please slow down.",
+        )
+
+
+@router.post("/chat", response_model=ChatMessageResponse, dependencies=[Depends(_check_rate_limit)])
 async def chat_endpoint(request: ChatMessageRequest):
     """
     Chat endpoint that accepts free-form text.

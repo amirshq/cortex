@@ -1,12 +1,12 @@
 from fastapi import HTTPException, status
 from typing import Optional
-from src.data.dto import (
+from src.database.dto import (
     ChatMessageRequest,
     ChatMessageResponse,
     ChatHistoryRequest,
     ChatHistoryResponse
 )
-from src.business.chatbot import process_chat_message
+from src.business.chatbot import process_chat_message, get_chat_history
 
 
 class ChatController:
@@ -76,30 +76,14 @@ class ChatController:
                     detail="Invalid user_id"
                 )
             
-            # Step 2: Call business logic to fetch history from database
-            # TODO: Implement get_chat_history() in business/chatbot.py
-            # The business logic should:
-            #   - Call repository layer
-            #   - Repository queries database
-            #   - Return actual history data
-            
-            # For now, return empty response as placeholder
-            # Once business logic is implemented, replace with:
-            # result = await get_chat_history(request)
-            # return ChatHistoryResponse(
-            #     messages=result["messages"],
-            #     total=result["total"],
-            #     session_id=request.session_id
-            # )
-            
-            messages = []  # Will come from database via business logic
-            total = 0
-            
+            # Step 2: Fetch history from Redis via business logic
+            result = await get_chat_history(request)
+
             # Step 3: Return response
             return ChatHistoryResponse(
-                messages=messages,
-                total=total,
-                session_id=request.session_id
+                messages=result["messages"],
+                total=result["total"],
+                session_id=result["session_id"],
             )
             
         except HTTPException:
