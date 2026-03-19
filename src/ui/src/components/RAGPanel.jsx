@@ -62,6 +62,7 @@ export default function RAGPanel() {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [uploading, setUploading]         = useState(false);
   const [uploadError, setUploadError]     = useState(null);
+  const [tableOcrEnabled, setTableOcrEnabled] = useState(null); // null = not yet known
   const [dragOver, setDragOver]           = useState(false);
 
   const [question, setQuestion]   = useState("");
@@ -82,6 +83,7 @@ export default function RAGPanel() {
     setUploadError(null);
     try {
       const result = await uploadPdf(file);
+      setTableOcrEnabled(result.table_ocr_enabled);
       setUploadedFiles((prev) => [
         { name: file.name, chunks: result.chunks_indexed },
         ...prev.filter((f) => f.name !== file.name),
@@ -179,6 +181,14 @@ export default function RAGPanel() {
               </li>
             ))}
           </ul>
+        )}
+
+        {tableOcrEnabled === false && (
+          <div className="rag-ocr-warning">
+            <strong>Table OCR is disabled.</strong> Answers from tables may be incomplete or missing.
+            To enable it, install <code>unstructured-client</code> and set{" "}
+            <code>UNSTRUCTURED_API_KEY</code> in your <code>.env</code> file.
+          </div>
         )}
       </section>
 

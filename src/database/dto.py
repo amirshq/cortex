@@ -177,6 +177,7 @@ class RAGUploadResponse(BaseModel):
     filename: str
     docs_indexed: int
     chunks_indexed: int
+    table_ocr_enabled: bool = False
     message: str = "PDF indexed successfully"
 
 

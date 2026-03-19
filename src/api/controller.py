@@ -152,6 +152,7 @@ class RAGController:
                 filename=file.filename,
                 docs_indexed=result["docs_indexed"],
                 chunks_indexed=result["chunks_indexed"],
+                table_ocr_enabled=result.get("table_ocr_enabled", False),
             )
         except HTTPException:
             raise

@@ -711,6 +711,26 @@ body {
   cursor: not-allowed;
 }
 
+/* Table OCR warning */
+.rag-ocr-warning {
+  margin-top: 10px;
+  padding: 10px 14px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  color: #92400e;
+  line-height: 1.5;
+}
+
+.rag-ocr-warning code {
+  background: #fef3c7;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.8rem;
+}
+
 /* Error */
 .rag-error {
   margin-top: 8px;

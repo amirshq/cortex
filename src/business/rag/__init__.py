@@ -15,9 +15,20 @@ from dotenv import load_dotenv
 
 from src.business.rag.retrieval import RAGPipeline
 from src.business.rag.index_builder import build_index
+from src.business.rag.vector_store import VectorStore
 from src.utils.config import load_config
 
 load_dotenv()
+
+# Reflect whether the unstructured-client package is installed and the
+# UNSTRUCTURED_API_KEY env var is present — both are required for table OCR.
+try:
+    from src.business.rag.pdfingest.unstructure_pdf_digest import _TABLE_PROCESSING_AVAILABLE as _TPA
+except Exception:
+    _TPA = False
+
+_UNSTRUCTURED_KEY_SET = bool(os.getenv("UNSTRUCTURED_API_KEY"))
+TABLE_OCR_ENABLED: bool = _TPA and _UNSTRUCTURED_KEY_SET
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
@@ -63,11 +74,21 @@ async def query_rag(question: str) -> Dict:
 async def ingest_pdfs(uploads_dir: Path) -> Dict:
     """
     Build / rebuild the vector index from all PDFs in uploads_dir.
-    Called after a new PDF has been saved to the upload directory.
+    The collection is reset first so stale chunks from previous uploads
+    are removed before the new PDF is indexed.
     """
     persist_dir = _rag_persist_dir()
+
+    # Wipe old chunks — upsert never deletes, so stale content from previous
+    # uploads would otherwise persist and pollute query results.
+    VectorStore(persist_dir=str(persist_dir)).reset()
+
     docs_count, chunks_count = build_index(
         data_dir=uploads_dir,
         persist_dir=persist_dir,
     )
-    return {"docs_indexed": docs_count, "chunks_indexed": chunks_count}
+    return {
+        "docs_indexed": docs_count,
+        "chunks_indexed": chunks_count,
+        "table_ocr_enabled": TABLE_OCR_ENABLED,
+    }
