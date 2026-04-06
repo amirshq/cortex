@@ -6,6 +6,7 @@ This guide walks you through every component of this project in the order you sh
 
 ## Table of Contents
 
+0. [Quick reference — curriculum summary](#0-quick-reference--curriculum-summary)
 1. [Project Architecture Overview](#1-project-architecture-overview)
 2. [Configuration & Environment Setup](#2-configuration--environment-setup)
 3. [Data Transfer Objects (DTOs)](#3-data-transfer-objects-dtos)
@@ -29,6 +30,128 @@ This guide walks you through every component of this project in the order you sh
 21. [API Layer — Controller](#21-api-layer--controller)
 22. [Frontend (React UI)](#22-frontend-react-ui)
 23. [Putting It All Together — The Build Order](#23-putting-it-all-together--the-build-order)
+
+---
+
+## 0. Quick reference — curriculum summary
+
+This section condenses [SUMMARY_LEARNING_GUIDE.md](SUMMARY_LEARNING_GUIDE.md): **mental model**, **tables**, and **Purpose / Learn / Practice** notes per module. Use it as an at-a-glance index; the numbered sections below go deeper.
+
+### Mental model: one request, many responsibilities
+
+A single chat or RAG request typically involves:
+
+1. **Transport** — HTTP, auth, rate limits, CORS  
+2. **Contract** — JSON shapes validated as Pydantic models (DTOs)  
+3. **Orchestration** — controller turns HTTP concerns into calls to domain code  
+4. **Domain** — chat logic, tool use, retrieval, prompting  
+5. **Infrastructure** — LLM client, vector DB, Redis, file storage  
+
+**Rule of thumb:** keep **HTTP** in `api/`, **rules and pipelines** in `business/`, **I/O adapters** in `memory/` (or a dedicated `infrastructure/` package). That separation makes tests and backend swaps easier.
+
+### Greenfield build order (phased)
+
+Build **vertical slices** early (health + one chat endpoint), then deepen. This table is the **phase view**; [§23](#23-putting-it-all-together--the-build-order) lists a **file-by-file** order for this repo.
+
+| Phase | What to build | Why this order |
+|-------|----------------|----------------|
+| **A** | Config loading (`config.yml` + a small loader) | Everything else reads model names, paths, flags |
+| **B** | DTOs (`database/dto.py` or equivalent) | Fixes the API contract before you wire logic |
+| **C** | FastAPI app + router + one controller method | Proves end-to-end path; OpenAPI docs appear |
+| **D** | Minimal LLM wrapper (`business/core/model.py`) | Single place for API keys, retries, streaming later |
+| **E** | Prompt builder (`business/core/prompt_builder.py`) | Keeps prompts out of controllers and routers |
+| **F** | Chatbot orchestration (`business/chatbot/`) | Uses D + E; still no RAG required |
+| **G** | Embeddings (`business/core/embedding.py`) | Needed for both RAG and semantic memory |
+| **H** | Vector store + ingest (`business/rag/`, chunking, index builder) | Offline/index path before query path |
+| **I** | Retrieval + optional rerank (`retrieval.py`, `re_ranker/`) | “Retrieve → rerank → prompt → generate” |
+| **J** | Memory layer (`memory/`) | Redis for short context; vector DB for long recall |
+| **K** | Rate limiting, upload endpoints, CLI scripts | Hardening and ops |
+
+You do **not** need RAG to ship a first chat; you **do** need config + DTOs + a thin API before anything else is testable.
+
+### Module purposes (one line each)
+
+| Module | **Purpose** | Primary location |
+|--------|-------------|------------------|
+| Config | One place for **non-secret** defaults (paths, collection names, model IDs) and environment-specific overrides. | `src/config/`, `src/utils/config.py` |
+| DTOs / validation | Define the **HTTP contract**: request bodies, query params, response shapes; Pydantic validates and drives OpenAPI. | `src/database/dto.py` |
+| API entry | Create the FastAPI `app`, attach CORS/middleware, mount routers, expose `/health`. | `src/api/main.py` |
+| Router | Map URLs and methods to **thin** handlers; delegate to controllers; optional `Depends()` (e.g. rate limit). | `src/api/router.py` |
+| Controller | **Translate** HTTP ↔ domain: request rules, call business code, map exceptions to status codes, wrap response DTOs. | `src/api/controller.py` |
+| Rate limiting | Protect the API from abuse; return **429** when exceeded. | `src/api/ratelimiter.py` |
+| Business — core | LLM wrapper, embeddings, prompt construction — **one** place for model calls and prompt templates. | `src/business/core/` |
+| Business — chatbot | **Conversation orchestration**: history, tools (function calling), memory reads/writes, LLM calls. | `src/business/chatbot/` |
+| Business — RAG | Ingest → index → query pipeline (retrieve, optional rerank, grounded generation). | `src/business/rag/` |
+| Memory | Adapters for **conversation state** and **semantic recall** — not HTTP, not public DTOs. | `src/memory/` |
+| Scripts | CLIs for indexing, diagnostics, smoke tests — **repeatable** ops without HTTP. | `scripts/` |
+| Tests | Unit business logic; integration via TestClient; smoke tests when keys/data exist. | `tests/` |
+
+### Business — core files
+
+| File | Role |
+|------|------|
+| `model.py` | LLM client wrapper (chat completions, temperature, system prompt injection) |
+| `embedding.py` | Text → vectors for retrieval and memory |
+| `prompt_builder.py` | Build system/user messages from templates + context |
+
+**Learn (core):** one place for logging, timeouts, and model resolution; prompts as functions/templates; embedding batch size and dimension **consistent** with the vector index.
+
+### RAG as stages
+
+1. **Ingest** — PDF/text → clean chunks (`pdfingest/`, `chunk.py`)  
+2. **Index** — embed chunks + store (`index_builder.py`, `vector_store.py`)  
+3. **Query** — embed question → retrieve top-k → optional **rerank** → prompt → LLM (`retrieval.py`, `re_ranker/`)  
+
+**Learn (RAG):** chunk size, overlap, metadata for citations; “retrieve many, rerank few”; inject only selected context in the prompt.
+
+### Practice ideas (quick wins)
+
+| Area | Practice |
+|------|----------|
+| Config | Change only `config.yml` and confirm a new `model_name` is picked up without code edits. |
+| DTOs | Add a field to a response DTO and watch `/docs` update. |
+| API entry | Add `GET /version` returning a string from config. |
+| Router | Add a route that calls one controller method and returns a DTO. |
+| Rate limit | Lower capacity in dev and trigger **429** from the client. |
+| RAG | Ingest a tiny PDF; query with a unique phrase; verify metadata/citations. |
+
+### Where to look in this repository
+
+| Concern | Primary location |
+|--------|-------------------|
+| HTTP surface | `src/api/main.py`, `router.py`, `controller.py` |
+| API shapes | `src/database/dto.py` |
+| LLM + prompts + embeddings | `src/business/core/` |
+| Chat orchestration | `src/business/chatbot/agentic_chatbot.py` |
+| RAG pipeline | `src/business/rag/retrieval.py` and subpackages |
+| Memory | `src/memory/` |
+| YAML config | `src/config/config.yml`, `src/utils/config.py` |
+
+### Cross-cutting skills (parallel with build)
+
+- **Async vs sync:** FastAPI handlers are often `async`; some SDKs are sync — know `asyncio.to_thread` or thread pools when needed.  
+- **Observability:** structured logs with `request_id`, timing around LLM and retrieval.  
+- **Security:** validate uploads, cap payload size, never log secrets.  
+- **Idempotency:** for “ingest this file twice,” define dedupe (hash + metadata).  
+
+### Minimal first-week checklist
+
+- [ ] Config loads; health endpoint works  
+- [ ] DTOs defined; `/docs` shows schemas  
+- [ ] POST chat returns a deterministic stub (no LLM) to prove wiring  
+- [ ] Swap stub for real LLM via `business/core/model.py`  
+- [ ] One RAG path: index one document, query, see grounded answer  
+- [ ] Rate limit returns 429 under load test  
+
+### Suggested reading order (docs + code)
+
+1. [FastAPI_Layers.md](FastAPI_Layers.md) — full-stack mental model  
+2. [CONTROLLER_GUIDE.md](CONTROLLER_GUIDE.md) — controller in detail  
+3. Skim `src/api/router.py` and `src/database/dto.py` side by side  
+4. Trace one chat: `router` → `controller` → `business/chatbot`  
+5. Trace one RAG query: `router` → `rag_controller` → `RAGPipeline` in `retrieval.py`  
+
+This mirrors **building** from an empty repo: contract and API first, then intelligence, then retrieval and memory.
 
 ---
 

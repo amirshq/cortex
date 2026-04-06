@@ -11,4 +11,4 @@ The learning materials include:
 - Documentation and README files
 - Step-by-step guides
 
-**Start here for a full curriculum (build order + every major module):** [COMPREHENSIVE_LEARNING_GUIDE.md](COMPREHENSIVE_LEARNING_GUIDE.md)
+**Quick tables + Purpose-by-module:** [COMPREHENSIVE_LEARNING_GUIDE.md §0](COMPREHENSIVE_LEARNING_GUIDE.md#0-quick-reference--curriculum-summary) · **Full deep-dive:** [COMPREHENSIVE_LEARNING_GUIDE.md](COMPREHENSIVE_LEARNING_GUIDE.md)

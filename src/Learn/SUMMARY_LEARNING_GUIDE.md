@@ -1,5 +1,7 @@
 # Comprehensive learning guide: building a Chatbot + RAG backend from scratch
 
+> The same **tables**, **Purpose** lines, and **Practice** ideas are merged into [COMPREHENSIVE_LEARNING_GUIDE.md §0 — Quick reference](COMPREHENSIVE_LEARNING_GUIDE.md#0-quick-reference--curriculum-summary) for readers using the long guide.
+
 This guide is for developers who want to **implement each piece in a sensible order** when starting a new project. It aligns with the layered layout used here: **API → business (chatbot, core, RAG) → memory → config/database DTOs**, and points to existing docs where they already exist.
 
 **Already in this repo:**
