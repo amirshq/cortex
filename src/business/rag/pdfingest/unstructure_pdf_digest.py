@@ -104,15 +104,18 @@ def ingest_single_pdf(
     if table_text:
         combined_text = pdf_text_only + separator + table_text
 
-    # Trim to budget while preferring PDF text first, then table text.
+    # Trim to budget. Table text is always preserved in full; body text is trimmed
+    # to fill whatever budget remains. This prevents tables from being silently
+    # dropped when the combined document exceeds max_context_chars.
     if len(combined_text) > max_context_chars:
         if table_text:
-            available_for_pdf = max_context_chars - len(table_text) - len(separator)
+            table_block = separator + table_text
+            available_for_pdf = max_context_chars - len(table_block)
             if available_for_pdf > 0:
-                pdf_part = pdf_text_only[:available_for_pdf]
-                combined_text = pdf_part + separator + table_text
+                combined_text = pdf_text_only[:available_for_pdf] + table_block
             else:
-                combined_text = pdf_text_only[:max_context_chars]
+                # table text alone already exceeds budget — keep it, trim body
+                combined_text = table_text[:max_context_chars]
         else:
             combined_text = pdf_text_only[:max_context_chars]
 

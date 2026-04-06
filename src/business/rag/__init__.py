@@ -86,6 +86,7 @@ async def ingest_pdfs(uploads_dir: Path) -> Dict:
     docs_count, chunks_count = build_index(
         data_dir=uploads_dir,
         persist_dir=persist_dir,
+        max_context_chars=500_000,  # large enough to capture entire papers including tables
     )
     return {
         "docs_indexed": docs_count,

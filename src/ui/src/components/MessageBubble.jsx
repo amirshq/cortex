@@ -1,4 +1,5 @@
 import React from "react";
+import ReactMarkdown from "react-markdown";
 
 export default function MessageBubble({ role, content, timestamp }) {
   const isUser = role === "user";
@@ -10,7 +11,13 @@ export default function MessageBubble({ role, content, timestamp }) {
       )}
 
       <div className={`bubble ${isUser ? "user-bubble" : "assistant-bubble"}`}>
-        <p className="bubble-text">{content}</p>
+        {isUser ? (
+          <p className="bubble-text">{content}</p>
+        ) : (
+          <div className="bubble-text bubble-markdown">
+            <ReactMarkdown>{content}</ReactMarkdown>
+          </div>
+        )}
         {timestamp && (
           <span className="bubble-time">
             {new Date(timestamp).toLocaleTimeString([], {

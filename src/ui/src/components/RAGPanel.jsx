@@ -65,11 +65,9 @@ export default function RAGPanel() {
   const [tableOcrEnabled, setTableOcrEnabled] = useState(null); // null = not yet known
   const [dragOver, setDragOver]           = useState(false);
 
-  const [question, setQuestion]   = useState("");
-  const [answer, setAnswer]       = useState(null);
-  const [sources, setSources]     = useState([]);
-  const [asking, setAsking]       = useState(false);
-  const [askError, setAskError]   = useState(null);
+  const [question, setQuestion]     = useState("");
+  const [asking, setAsking]         = useState(false);
+  const [conversations, setConversations] = useState([]); // [{id, question, answer, sources, error}]
 
   const fileInputRef = useRef(null);
 
@@ -111,17 +109,24 @@ export default function RAGPanel() {
   // ── ask logic ─────────────────────────────────────────────────────────────
   const handleAsk = async () => {
     const q = question.trim();
-    if (!q) return;
+    if (!q || asking) return;
+
+    const id = Date.now();
+    setConversations((prev) => [...prev, { id, question: q, answer: null, sources: [], error: null }]);
+    setQuestion("");
     setAsking(true);
-    setAskError(null);
-    setAnswer(null);
-    setSources([]);
+
     try {
       const result = await ragQuery(q);
-      setAnswer(result.answer);
-      setSources(result.sources || []);
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === id ? { ...c, answer: result.answer, sources: result.sources || [] } : c
+        )
+      );
     } catch (err) {
-      setAskError(err.message);
+      setConversations((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, error: err.message } : c))
+      );
     } finally {
       setAsking(false);
     }
@@ -192,7 +197,42 @@ export default function RAGPanel() {
         )}
       </section>
 
-      {/* ── Question section ── */}
+      {/* ── Conversation history ── */}
+      {conversations.map((conv) => (
+        <section key={conv.id} className="rag-section rag-answer-section">
+          <div className="rag-question-bubble">
+            <p className="rag-question-text">{conv.question}</p>
+          </div>
+
+          {conv.error && <p className="rag-error">{conv.error}</p>}
+
+          {!conv.answer && !conv.error && (
+            <div className="rag-answer-bubble">
+              <div className="rag-spinner" />
+            </div>
+          )}
+
+          {conv.answer && (
+            <>
+              <div className="rag-answer-bubble">
+                <p className="rag-answer-text">{conv.answer}</p>
+              </div>
+              {conv.sources.length > 0 && (
+                <div className="rag-sources">
+                  <p className="rag-sources-label">
+                    {conv.sources.length} source{conv.sources.length !== 1 ? "s" : ""} used
+                  </p>
+                  {conv.sources.map((s, i) => (
+                    <SourceCard key={i} source={s} index={i} />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </section>
+      ))}
+
+      {/* ── Question input ── */}
       <section className="rag-section">
         <h2 className="rag-section-title">Ask a Question</h2>
         <div className="rag-input-row">
@@ -213,27 +253,7 @@ export default function RAGPanel() {
             {asking ? <div className="rag-spinner rag-spinner-sm" /> : <SendIcon />}
           </button>
         </div>
-        {askError && <p className="rag-error">{askError}</p>}
       </section>
-
-      {/* ── Answer section ── */}
-      {answer && (
-        <section className="rag-section rag-answer-section">
-          <h2 className="rag-section-title">Answer</h2>
-          <div className="rag-answer-bubble">
-            <p className="rag-answer-text">{answer}</p>
-          </div>
-
-          {sources.length > 0 && (
-            <div className="rag-sources">
-              <p className="rag-sources-label">{sources.length} source{sources.length !== 1 ? "s" : ""} used</p>
-              {sources.map((s, i) => (
-                <SourceCard key={i} source={s} index={i} />
-              ))}
-            </div>
-          )}
-        </section>
-      )}
     </div>
   );
 }

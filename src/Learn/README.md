@@ -10,3 +10,5 @@ The learning materials include:
 - Example code snippets
 - Documentation and README files
 - Step-by-step guides
+
+**Start here for a full curriculum (build order + every major module):** [COMPREHENSIVE_LEARNING_GUIDE.md](COMPREHENSIVE_LEARNING_GUIDE.md)

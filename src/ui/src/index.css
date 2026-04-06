@@ -386,6 +386,35 @@ body {
   line-height: 1.6;
 }
 
+/* Markdown rendered inside assistant bubbles */
+.bubble-markdown {
+  white-space: normal; /* let ReactMarkdown handle whitespace */
+}
+.bubble-markdown p   { margin: 0 0 6px; }
+.bubble-markdown p:last-child { margin-bottom: 0; }
+.bubble-markdown ul,
+.bubble-markdown ol  { margin: 4px 0 6px 18px; padding: 0; }
+.bubble-markdown li  { margin-bottom: 2px; }
+.bubble-markdown strong { font-weight: 600; }
+.bubble-markdown em  { font-style: italic; }
+.bubble-markdown code {
+  background: rgba(0,0,0,0.07);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.82rem;
+  font-family: monospace;
+}
+.bubble-markdown pre {
+  background: rgba(0,0,0,0.07);
+  border-radius: 6px;
+  padding: 10px;
+  overflow-x: auto;
+  font-size: 0.82rem;
+}
+.bubble-markdown h1,
+.bubble-markdown h2,
+.bubble-markdown h3 { font-weight: 600; margin: 8px 0 4px; }
+
 .bubble-time {
   display: block;
   font-size: 0.67rem;
@@ -740,6 +769,23 @@ body {
   border: 1px solid #fecaca;
   border-radius: 8px;
   font-size: 0.82rem;
+}
+
+/* Question bubble (user side) */
+.rag-question-bubble {
+  background: #e8f5e9;
+  border: 1px solid #a5d6a7;
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  align-self: flex-end;
+}
+
+.rag-question-text {
+  font-size: 0.9rem;
+  color: #1b5e20;
+  white-space: pre-wrap;
+  margin: 0;
 }
 
 /* Answer */
