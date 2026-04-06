@@ -143,6 +143,11 @@ class RAGController:
             uploads_dir = _PROJECT_ROOT / "data" / "rag_uploads"
             uploads_dir.mkdir(parents=True, exist_ok=True)
 
+            # Remove all previously uploaded PDFs so only the new one gets indexed.
+            # Without this, every upload re-indexes ALL past PDFs alongside the new one.
+            for old_pdf in uploads_dir.glob("*.pdf"):
+                old_pdf.unlink()
+
             dest = uploads_dir / file.filename
             with dest.open("wb") as f:
                 shutil.copyfileobj(file.file, f)
