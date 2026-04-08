@@ -486,7 +486,32 @@ response = client.chat.completions.create(
 reply = response.choices[0].message.content
 tokens_used = response.usage.total_tokens
 ```
+### Sample of LLM Respose
+```python 
 
+response = {
+    "id": "chatcmpl-abc123",
+    "object": "chat.completion",
+    "created": 1710000000,
+    "model": "gpt-4.1-mini",
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "role": "assistant",
+                "content": "RAG stands for Retrieval-Augmented Generation. It combines retrieval with LLMs."
+            },
+            "finish_reason": "stop"
+        }
+    ],
+    "usage": {
+        "prompt_tokens": 45,
+        "completion_tokens": 20,
+        "total_tokens": 65
+    }
+}
+
+```
 ### Tool calling (for agentic behavior)
 
 ```python
