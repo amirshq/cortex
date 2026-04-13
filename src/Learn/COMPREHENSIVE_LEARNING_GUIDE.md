@@ -2,6 +2,8 @@
 
 This guide walks you through every component of this project in the order you should build them. Each section explains the concept, the pattern used here, and a minimal working example to get you started.
 
+Each part is like a Wrapper to learn the core idea.
+
 ---
 
 ## Table of Contents
