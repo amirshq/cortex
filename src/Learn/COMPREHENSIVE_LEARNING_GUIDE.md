@@ -33,6 +33,7 @@ Each part is like a Wrapper to learn the core idea.
 22. [Frontend (React UI)](#22-frontend-react-ui)
 23. [Putting It All Together — The Build Order](#23-putting-it-all-together--the-build-order)
 24. [Docker — Containerization Best Practices](#24-docker--containerization-best-practices)
+25. [Git — Cheat Sheet](#25-git--cheat-sheet)
 
 ---
 
@@ -2317,3 +2318,139 @@ docker compose logs -f                 Stream all logs
 docker exec -it <name> /bin/sh        Shell into a container
 docker system prune -a                 Delete all unused images/containers
 ```
+
+---
+
+## 25. Git — Cheat Sheet
+
+### Mental model
+
+```
+edit → add → commit → push → PR → merge
+```
+
+Every change follows this pipeline. Understand where you are in it at all times.
+
+---
+
+### Safety check (do this first)
+
+```bash
+git branch --show-current      # verify you are on the correct branch
+git status                     # see what's staged, modified, untracked
+```
+
+Never work in **detached HEAD** — if you see `HEAD detached at ...`, create a branch immediately with `git checkout -b <name>`.
+
+---
+
+### Branches
+
+```bash
+git branch                     # list local branches
+git branch --show-current      # show current branch
+git checkout -b <branch>       # create + switch to new branch
+git switch -c <branch>         # same (newer syntax)
+git branch -d <branch>         # delete a local branch (safe — refuses if unmerged)
+git branch -D <branch>         # force-delete a local branch
+```
+
+---
+
+### Add / Commit / Push
+
+```bash
+git add .                      # stage all changes
+git add <file>                 # stage a specific file
+git commit -m "msg"            # commit with message
+git push                       # push to remote (if upstream is set)
+```
+
+---
+
+### First push (set upstream)
+
+```bash
+git push -u origin <branch>    # push + link local branch to remote
+```
+
+After this, `git push` / `git pull` work without specifying the remote.
+
+---
+
+### Push to another branch
+
+```bash
+git push origin HEAD:<target-branch>   # push current work to a different remote branch
+```
+
+---
+
+### Pull latest
+
+```bash
+git pull origin main           # fetch + merge latest changes from main
+git pull --rebase origin main  # fetch + rebase (cleaner history, no merge commit)
+```
+
+---
+
+### Merge into main
+
+```bash
+git checkout main              # switch to main
+git pull origin main           # make sure main is up to date
+git merge <branch>             # merge <branch> into main
+git push origin main           # push updated main to remote
+```
+
+---
+
+### Pull Request (CLI with GitHub CLI)
+
+```bash
+gh pr create --base main --head <branch> --title "title" --body "description"
+```
+
+---
+
+### Undo / Fix mistakes
+
+```bash
+git restore <file>             # discard unstaged changes in a file
+git restore --staged <file>    # unstage a file (keep changes in working tree)
+git commit --amend -m "new msg"  # fix the last commit message (before push)
+git reset --soft HEAD~1        # undo last commit, keep changes staged
+git stash                      # temporarily shelve changes
+git stash pop                  # re-apply stashed changes
+```
+
+---
+
+### Inspect
+
+```bash
+git log --oneline -10          # last 10 commits, compact
+git diff                       # unstaged changes
+git diff --staged              # staged changes (what will be committed)
+git log --oneline --graph      # visual branch history
+```
+
+---
+
+### Quick reference table
+
+| Task | Command |
+|------|---------|
+| See current branch | `git branch --show-current` |
+| Create + switch branch | `git checkout -b <branch>` |
+| Stage everything | `git add .` |
+| Commit | `git commit -m "msg"` |
+| First push | `git push -u origin <branch>` |
+| Subsequent pushes | `git push` |
+| Pull latest main | `git pull origin main` |
+| Merge branch into main | `git checkout main && git pull && git merge <branch>` |
+| Create PR | `gh pr create --base main --head <branch>` |
+| Undo last commit (keep changes) | `git reset --soft HEAD~1` |
+| Discard file changes | `git restore <file>` |
+| Stash work | `git stash` / `git stash pop` |
