@@ -32,6 +32,7 @@ Each part is like a Wrapper to learn the core idea.
 21. [API Layer — Controller](#21-api-layer--controller)
 22. [Frontend (React UI)](#22-frontend-react-ui)
 23. [Putting It All Together — The Build Order](#23-putting-it-all-together--the-build-order)
+24. [Docker — Containerization Best Practices](#24-docker--containerization-best-practices)
 
 ---
 
@@ -1839,3 +1840,480 @@ Phase 7: Frontend
 5. **HTTP fundamentals** — GET vs POST, status codes (200/201/400/401/422/429/500), headers.
 6. **SQL basics** — CREATE TABLE, INSERT, SELECT, WHERE, JOIN, indexes.
 7. **Redis data structures** — String, List, and Hash types with TTL.
+
+---
+
+## 24. Docker — Containerization Best Practices
+
+### What Docker solves
+
+"Works on my machine" → works **everywhere**. Docker packages your app + its entire runtime into an isolated, reproducible unit called a **container**.
+
+| Concept | What it is |
+|---------|-----------|
+| **Image** | Read-only blueprint (built from a `Dockerfile`). Immutable. |
+| **Container** | Running instance of an image. Ephemeral by default. |
+| **Dockerfile** | Recipe to build an image — base OS, dependencies, code, startup command. |
+| **docker-compose.yml** | Orchestrates multiple containers (backend, frontend, DB, Redis) as one stack. |
+| **Volume** | Persistent storage that survives container restarts. |
+| **Network** | Virtual network so containers can talk to each other by service name. |
+| **Registry** | Remote storage for images (Docker Hub, GitHub Container Registry, ECR). |
+
+---
+
+### Dockerfile best practices
+
+| Rule | Why |
+|------|-----|
+| Use a **specific base tag** (`python:3.12-slim`, not `python:latest`) | Reproducibility — `latest` can change under you. |
+| **Copy dependency files first**, then install, then copy source | Maximizes Docker layer cache. Code changes won't re-install deps. |
+| Use **multi-stage builds** for frontend | Build stage compiles; final stage only serves static files → tiny image. |
+| **Don't run as root** | Security. Create a non-root user in the image. |
+| One **process per container** | Backend in one container, frontend in another, DB in another. |
+| Use `.dockerignore`** | Keep `node_modules`, `.git`, `__pycache__`, `.env` out of the image. |
+| **Minimize layers** | Combine related `RUN` commands with `&&`. |
+| Add **health checks** | Let Docker (and orchestrators) know if the app is actually healthy. |
+| **Pin dependency versions** in `requirements.txt` / `package-lock.json` | Prevents surprise upgrades inside the build. |
+| Keep images **small** | Use `-slim` or `-alpine` base images. Remove build-time tools after install. |
+
+---
+
+### .dockerignore
+
+Create this in your project root — it works like `.gitignore` but for `docker build`:
+
+```
+# .dockerignore
+
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+.venv
+venv
+.env
+.env.*
+
+# Node
+node_modules
+.next
+build
+dist
+
+# IDE & OS
+.vscode
+.idea
+.DS_Store
+*.log
+
+# Docker (don't send compose/dockerfiles into the image)
+docker-compose*.yml
+Dockerfile*
+
+# Data / docs
+*.md
+data/
+```
+
+---
+
+### Backend Dockerfile (Python + FastAPI)
+
+```dockerfile
+# ---------- Backend Dockerfile ----------
+# File: backend/Dockerfile
+
+# 1. Use specific slim image
+FROM python:3.12-slim AS base
+
+# 2. Prevent Python from writing .pyc and enable unbuffered output
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# 3. Set working directory
+WORKDIR /app
+
+# 4. Install system dependencies (if you need any, e.g. for psycopg2)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc libpq-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# 5. Copy and install Python dependencies FIRST (layer cache)
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# 6. Copy application source
+COPY . .
+
+# 7. Create non-root user
+RUN addgroup --system appgroup && \
+    adduser --system --ingroup appgroup appuser
+USER appuser
+
+# 8. Expose the port FastAPI runs on
+EXPOSE 8000
+
+# 9. Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+
+# 10. Start the app
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+#### What each line teaches you
+
+| Line(s) | Concept |
+|----------|---------|
+| `FROM python:3.12-slim` | Pinned, minimal base image (~150 MB vs ~900 MB for full). |
+| `ENV PYTHONDONTWRITEBYTECODE=1` | No `.pyc` files in the container — cleaner. |
+| `ENV PYTHONUNBUFFERED=1` | Logs appear immediately in `docker logs` (no buffering). |
+| `COPY requirements.txt .` then `RUN pip install` | **Layer caching**: if `requirements.txt` hasn't changed, Docker skips the install step. |
+| `COPY . .` | Comes AFTER dependency install so code changes don't bust the cache. |
+| `adduser` + `USER appuser` | Container runs as non-root — limits damage if exploited. |
+| `HEALTHCHECK` | Docker will mark the container as `unhealthy` if the endpoint fails. |
+| `CMD` with a JSON array | Exec form — process receives signals properly (no shell wrapper). |
+
+---
+
+### Frontend Dockerfile (React — multi-stage build)
+
+```dockerfile
+# ---------- Frontend Dockerfile ----------
+# File: frontend/Dockerfile
+
+# ---- Stage 1: Build ----
+FROM node:20-alpine AS build
+
+WORKDIR /app
+
+# Copy dependency manifests first (layer cache)
+COPY package.json package-lock.json ./
+RUN npm ci --production=false
+
+# Copy source and build
+COPY . .
+RUN npm run build
+
+# ---- Stage 2: Serve ----
+FROM nginx:1.27-alpine AS production
+
+# Remove default nginx page
+RUN rm -rf /usr/share/nginx/html/*
+
+# Copy built assets from Stage 1
+COPY --from=build /app/build /usr/share/nginx/html
+
+# Custom nginx config for SPA routing
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD wget -qO- http://localhost:80/ || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]
+```
+
+#### nginx.conf for SPA routing
+
+```nginx
+# File: frontend/nginx.conf
+
+server {
+    listen 80;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # SPA: route all non-file requests to index.html
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Proxy API calls to the backend container
+    location /api/ {
+        proxy_pass http://backend:8000/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Cache static assets
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff2?)$ {
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+    }
+}
+```
+
+#### Why multi-stage?
+
+```
+Stage 1 (build):   node:20-alpine  ~180 MB  +  node_modules  +  source
+Stage 2 (serve):   nginx:1.27-alpine  ~40 MB  +  static files (~5 MB)
+
+Final image ≈ 45 MB   vs   single-stage ≈ 500+ MB
+```
+
+Only the **last stage** is shipped. Build tools, `node_modules`, and source code are discarded.
+
+---
+
+### docker-compose.yml — Full stack
+
+```yaml
+# File: docker-compose.yml
+
+services:
+
+  # ---------- Backend (FastAPI) ----------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: chatbot-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DATABASE_URL=sqlite:///data/chat_history.db
+    volumes:
+      - backend-data:/app/data          # persist SQLite DB
+      - chroma-data:/app/chroma_store   # persist ChromaDB
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ---------- Frontend (React + Nginx) ----------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: chatbot-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # ---------- Redis ----------
+  redis:
+    image: redis:7-alpine
+    container_name: chatbot-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    command: redis-server --appendonly yes  # enable AOF persistence
+
+# ---------- Named Volumes ----------
+volumes:
+  backend-data:
+  chroma-data:
+  redis-data:
+
+# ---------- Network ----------
+networks:
+  app-network:
+    driver: bridge
+```
+
+#### Compose key concepts
+
+| Key | What it does |
+|-----|-------------|
+| `services` | Each entry becomes one container. |
+| `build.context` | Directory sent to Docker as the build context. |
+| `env_file` | Loads variables from `.env` into the container. |
+| `environment` | Override/add specific env vars (here: point backend to the Redis container by name). |
+| `depends_on.condition` | Wait for another service's healthcheck to pass before starting. |
+| `volumes` | `host-path:container-path` or named volumes for persistence. |
+| `networks` | All services on `app-network` can reach each other by **service name** (e.g., `http://backend:8000`). |
+| `restart: unless-stopped` | Auto-restart on crash; don't restart if manually stopped. |
+| `command` | Override the image's default CMD. |
+
+---
+
+### Essential Docker commands
+
+```bash
+# Build and start everything (detached mode)
+docker compose up -d --build
+
+# View running containers
+docker compose ps
+
+# Follow logs for all services
+docker compose logs -f
+
+# Follow logs for one service
+docker compose logs -f backend
+
+# Stop everything (containers removed, volumes kept)
+docker compose down
+
+# Stop everything AND delete volumes (full reset)
+docker compose down -v
+
+# Rebuild one service without cache
+docker compose build --no-cache backend
+
+# Open a shell inside a running container
+docker exec -it chatbot-backend /bin/bash
+
+# Check image sizes
+docker images | grep chatbot
+```
+
+---
+
+### Environment variables pattern
+
+**Never bake secrets into images.** Use this hierarchy:
+
+```
+Priority (highest → lowest):
+1. docker-compose.yml  →  environment:
+2. docker-compose.yml  →  env_file: .env
+3. Dockerfile          →  ENV (only for non-secret defaults)
+```
+
+Sample `.env` file (never commit this):
+
+```bash
+# .env
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4o
+REDIS_HOST=redis
+REDIS_PORT=6379
+CHROMA_PERSIST_DIR=/app/chroma_store
+LOG_LEVEL=info
+```
+
+---
+
+### Development vs Production compose
+
+Use an **override file** for dev-specific settings:
+
+```yaml
+# File: docker-compose.override.yml  (auto-loaded by docker compose)
+
+services:
+  backend:
+    volumes:
+      - ./backend:/app    # mount source code for live reload
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      - LOG_LEVEL=debug
+
+  frontend:
+    build:
+      target: build       # stop at build stage, use dev server instead
+    command: npm start
+    ports:
+      - "3000:3000"       # React dev server port
+    volumes:
+      - ./frontend/src:/app/src   # hot reload
+```
+
+```bash
+# Dev (auto-applies override)
+docker compose up
+
+# Production (skip override explicitly)
+docker compose -f docker-compose.yml up -d
+```
+
+---
+
+### Common mistakes to avoid
+
+| Mistake | Fix |
+|---------|-----|
+| Using `latest` tag | Pin versions: `python:3.12-slim`, `node:20-alpine`. |
+| Putting `COPY . .` before `pip install` | Copy dependency files first → install → then copy source. |
+| Storing data inside the container | Use **volumes** — containers are ephemeral. |
+| Running as root | Add `USER appuser` in the Dockerfile. |
+| Hardcoding secrets in Dockerfile | Use `env_file` or Docker secrets. Never `ENV OPENAI_API_KEY=sk-...`. |
+| Fat images (1 GB+) | Use `-slim` / `-alpine` bases + multi-stage builds. |
+| No healthchecks | Add `HEALTHCHECK` so `depends_on.condition` and orchestrators work. |
+| Ignoring `.dockerignore` | Without it, `.git`, `node_modules`, `.env` get shipped into the image. |
+
+---
+
+### Project file structure with Docker
+
+```
+project-root/
+├── docker-compose.yml
+├── docker-compose.override.yml   # dev overrides (git-ignored or not)
+├── .env                          # secrets (git-ignored)
+├── .dockerignore
+│
+├── backend/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── api/
+│   │   ├── main.py
+│   │   ├── router.py
+│   │   └── controller.py
+│   ├── business/
+│   ├── memory/
+│   └── rag/
+│
+└── frontend/
+    ├── Dockerfile
+    ├── nginx.conf
+    ├── package.json
+    ├── package-lock.json
+    └── src/
+        ├── App.jsx
+        └── index.js
+```
+
+---
+
+### Quick cheat sheet
+
+```
+docker build -t myapp .               Build an image from current dir
+docker run -p 8000:8000 myapp         Run a container, map ports
+docker compose up -d --build           Build + start all services (detached)
+docker compose down                    Stop + remove containers
+docker compose down -v                 ↑ and delete volumes too
+docker compose logs -f                 Stream all logs
+docker exec -it <name> /bin/sh        Shell into a container
+docker system prune -a                 Delete all unused images/containers
+```
