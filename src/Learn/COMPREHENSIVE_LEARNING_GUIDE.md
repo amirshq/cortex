@@ -2333,6 +2333,27 @@ Every change follows this pipeline. Understand where you are in it at all times.
 
 ---
 
+### What is HEAD?
+
+In Git, **HEAD = where you are currently working.**
+
+When HEAD points to a **branch**, your commits land on that branch. When HEAD points directly to a **commit** (not a branch), you are in **detached HEAD** state — commits are "floating" and not attached to any branch.
+
+| State | HEAD points to | Behavior |
+|-------|---------------|----------|
+| On a branch | `refs/heads/main` → commit | Commits are saved in that branch. Branch pointer moves forward. |
+| Detached HEAD | A raw commit hash | Commits are not attached to any branch. They will be **lost** if you switch away without saving. |
+
+```bash
+# You'll see this if detached:
+# "HEAD detached at abc1234"
+
+# Fix: create a branch to save your work
+git checkout -b my-rescued-work
+```
+
+---
+
 ### Safety check (do this first)
 
 ```bash
