@@ -1862,6 +1862,21 @@ Phase 7: Frontend
 
 ---
 
+### Most important Instructions
+
+| Instruction | Purpose |
+|-------------|---------|
+| `FROM` | Base image |
+| `WORKDIR` | Set working directory |
+| `COPY` | Copy files |
+| `RUN` | Execute commands |
+| `CMD` | Default run command |
+| `ENTRYPOINT` | Fixed execution |
+| `ENV` | Environment variables |
+| `EXPOSE` | Document ports |
+
+---
+
 ### Dockerfile best practices
 
 | Rule | Why |
@@ -2150,21 +2165,6 @@ networks:
     driver: bridge
 ```
 
-#### Compose key concepts
-
-| Key | What it does |
-|-----|-------------|
-| `services` | Each entry becomes one container. |
-| `build.context` | Directory sent to Docker as the build context. |
-| `env_file` | Loads variables from `.env` into the container. |
-| `environment` | Override/add specific env vars (here: point backend to the Redis container by name). |
-| `depends_on.condition` | Wait for another service's healthcheck to pass before starting. |
-| `volumes` | `host-path:container-path` or named volumes for persistence. |
-| `networks` | All services on `app-network` can reach each other by **service name** (e.g., `http://backend:8000`). |
-| `restart: unless-stopped` | Auto-restart on crash; don't restart if manually stopped. |
-| `command` | Override the image's default CMD. |
-
----
 
 ### Essential Docker commands
 
