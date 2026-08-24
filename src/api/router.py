@@ -20,6 +20,7 @@ from src.database.dto import (
     RAGUploadResponse,
 )
 from src.api.controller import chat_controller, rag_controller
+from src.api.metrics import RATE_LIMIT_REJECTIONS_TOTAL
 from src.api.ratelimiter import TokenBucket
 
 router = APIRouter()
@@ -30,6 +31,7 @@ _rate_limiter = TokenBucket(capacity=10, refill_rate=2.0)
 
 def _check_rate_limit() -> None:
     if not _rate_limiter.consume(1):
+        RATE_LIMIT_REJECTIONS_TOTAL.inc()
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Rate limit exceeded. Please slow down.",
