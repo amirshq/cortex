@@ -1,0 +1,42 @@
+# Alertmanager configuration for the personal-chatbot monitoring stack.
+#
+# This ships with NO notification channel configured — alerts are grouped and
+# de-duplicated but not delivered anywhere. Firing/resolved alerts are still
+# visible in the Alertmanager UI (http://localhost:9093). Before relying on
+# this for anything beyond local dev, uncomment and fill in one of the
+# receivers below (or add your own — see https://prometheus.io/docs/alerting/latest/configuration/#receiver).
+
+route:
+  receiver: "default"
+  group_by: ["alertname", "severity"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: "default"
+    # --- Slack example ---------------------------------------------------
+    # slack_configs:
+    #   - api_url: "https://hooks.slack.com/services/XXX/YYY/ZZZ"
+    #     channel: "#chatbot-alerts"
+    #     send_resolved: true
+
+    # --- Email example -----------------------------------------------------
+    # email_configs:
+    #   - to: "you@example.com"
+    #     from: "alertmanager@example.com"
+    #     smarthost: "smtp.example.com:587"
+    #     auth_username: "alertmanager@example.com"
+    #     auth_password: "REPLACE_ME"
+    #     send_resolved: true
+
+    # --- Generic webhook example --------------------------------------------
+    # webhook_configs:
+    #   - url: "https://example.com/alertmanager-webhook"
+    #     send_resolved: true
+
+inhibit_rules:
+  # Don't page for high latency/error-rate on an API that's already down.
+  - source_matchers: ["alertname = APIDown"]
+    target_matchers: ["alertname =~ APIHighErrorRate|APIHighLatencyP95"]
+    equal: ["job"]
