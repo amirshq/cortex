@@ -89,10 +89,10 @@ The React UI (`src/ui/`) is not containerized — run it separately with `npm ru
 ## Configuration
 
 - Secrets and per-environment values live in `.env` (gitignored): `OPENAI_MODEL_NAME`,
-  `OPENAI_TEMPERATURE`, `OPENAI_MAX_TOKENS`, `HF_TOKEN`, `LLM_PROVIDER`,
-  `UNSTRUCTURED_API_KEY`, plus `REDIS_URL` and `GRAFANA_ADMIN_PASSWORD` used by the Docker
-  stack. Never commit real values — there is no `.env.example` yet; create one with
-  placeholder values if you add new required variables.
+  `OPENAI_TEMPERATURE`, `OPENAI_MAX_TOKENS`, `HF_TOKEN`, `LLM_PROVIDER`, plus `REDIS_URL`
+  and `GRAFANA_ADMIN_PASSWORD` used by the Docker stack. Never commit real values — there
+  is no `.env.example` yet; create one with placeholder values if you add new required
+  variables.
 - Non-secret tunables (model names, RAG `k`, history limits, agent config) live in
   `src/config/config.yml`, loaded via `src/utils/config.py`.
 

@@ -1,163 +1,177 @@
 # Personal Chatbot
 
-A personal chatbot for daily tasks built with **FastAPI** (clean architecture backend), **SQLAlchemy**, **Hugging Face LLM models**, and a **React frontend**. This project follows enterprise-grade architecture patterns and will be developed progressively.
+A personal assistant chatbot built with **FastAPI** (layered/clean architecture backend), an
+**LLM** (OpenAI and/or Hugging Face, switchable), a **RAG pipeline** over your own PDFs, and a
+**React (Vite) frontend**. It's intentionally heavily commented — the codebase doubles as a
+teaching resource for FastAPI and LLM-app architecture patterns (see `src/Learn/`).
 
+## 🎯 What it does
 
-This project is intended for learning purposes and can be used in production with minor changes.
-I have added lots of comments to explain the concepts, variables and functions in the code.
-
-## 🎯 Project Overview
-
-This project aims to build an intelligent personal assistant chatbot that can:
-- Handle natural language conversations
-- Manage daily tasks and reminders
-- Process structured commands (create task, list tasks, etc.)
-- Maintain conversation history and context
-- Use vector databases for semantic search and memory
+- **Chat** — conversational endpoint backed by an LLM, with short-term memory in Redis and
+  longer-term history storage.
+- **RAG over PDFs** — upload a PDF, it's parsed (text + tables) by
+  [Docling](https://github.com/docling-project/docling) fully locally (no external API or
+  API key), chunked, embedded, and stored in a Chroma vector store; ask questions and get
+  answers grounded in retrieved, re-ranked chunks.
+- **Rate limiting** — token-bucket limiter protecting the API.
+- **Monitoring** — Prometheus metrics, Grafana dashboard, Alertmanager alert rules, all
+  running via Docker Compose alongside the app.
 
 ## 🏗️ Architecture
 
-This project follows a **layered architecture** (N-Tier) design pattern. See [FastAPI Layers Guide](src/Learn/FastAPI_Layers.md) for detailed architecture documentation.
-
-### System Design Overview
+Layered ("clean") architecture — see [FastAPI Layers Guide](src/Learn/FastAPI_Layers.md) for
+the full walkthrough.
 
 ![ChatGPT-like Chat System with Memory](src/Images/ChatGPT-like%20Chat%20System%20with%20Memory.png)
 
-### System Design Layers
-
-The project is organized into the following layers:
-
-#### API Layer
-- **[+]** API Gateway
-- **[+]** Rate Limiter
-- **[+]** Controller
-- **[+]** DTO (Data Transfer Objects)
-- **[ ]** Validation (Enhanced)
-- **[+]** Router
-- **[ ]** Token Usage Tracker
-
-#### Business Logic Layer
-- **[+]** Chatbot Processing
-- **[+]** Query Type Detection
-- **[+]** LLM Integration
-- **[ ]** Task Management
-- **[ ]** Intent Classification
-
-#### Data Layer
-- **[+]** Database Models (SQLAlchemy)
-- **[+]** DTOs
-- **[ ]** Repository Pattern
-- **[ ]** Migrations (Alembic)
-
-#### Memory Layer
-- **[ ]** Response Cache
-- **[+]** Vector Database (for semantic search)
-- **[ ]** Conversation Memory
-- **[ ]** Long-term Memory Storage
-
-## 📁 Project Structure
-
 ```
-personal-chatbot/
-├── src/
-│   ├── api/              # API Layer (Router, Controller, Middleware)
-│   │   ├── main.py       # FastAPI application entry point
-│   │   ├── router.py     # API route definitions
-│   │   ├── controller.py # Request/response handling
-│   │   └── ratelimiter.py
-│   ├── business/         # Business Logic Layer
-│   │   ├── chatbot.py    # Core chatbot processing
-│   │   ├── model.py      # LLM model integration
-│   │   └── vectordb.py   # Vector database operations
-│   ├── data/             # Data Layer
-│   │   ├── dto.py        # Data Transfer Objects
-│   │   └── database.py   # Database configuration
-│   ├── Learn/            # Learning resources and documentation
-│   │   ├── FastAPI_Layers.md
-│   │   ├── CONTROLLER_GUIDE.md
-│   │   └── README.md
-│   └── Images/           # Architecture diagrams
-├── README.md
-└── .gitignore
+src/
+  api/            API layer: FastAPI app, router, controllers, rate limiter, metrics.
+    main.py       App entrypoint, middleware, /, /health, /metrics.
+    router.py     Route definitions -> controllers (thin by design).
+    controller.py Request/response handling, delegates to business layer.
+    ratelimiter.py Token-bucket limiter (well-commented reference implementation).
+    metrics.py    Prometheus metric definitions + HTTP instrumentation middleware.
+  business/
+    chatbot/      Chat orchestration (agentic_chatbot.py).
+    core/         model.py (LLM client), embedding.py, prompt_builder.py.
+    rag/          PDF ingestion (Docling), chunking, vector_store.py, retrieval.py, re_ranker/.
+  database/
+    dto.py        Pydantic request/response models (source of truth for API contracts).
+    database.py   SQLAlchemy setup — currently EMPTY, not yet implemented.
+  memory/
+    redis_memory.py       Short-term memory (Redis lists, TTL).
+    long_term_memory.py   Longer-term memory.
+    chat_history_manager.py
+    responsecache.py
+  config/config.yml  Non-secret app config (model names, temperature, dirs, RAG params).
+  utils/config.py    YAML loader for config.yml.
+  ui/             React + Vite frontend (separate npm project, not containerized).
+  Learn/          Architecture/teaching docs — read before changing layer boundaries.
+scripts/          CLI utilities (diagnose.py, index_cli.py, retrieval_cli.py).
+tests/            pytest tests, currently only under tests/business/rag/.
+Docker/           Dockerfile + docker-compose stack (app, redis, Prometheus, Alertmanager, Grafana, exporters).
+data/             SQLite DB, Chroma persistence, RAG uploads — gitignored, not committed.
 ```
 
-## 🚀 Getting Started
+## 🚀 Getting started
 
 ### Prerequisites
 
-- Python 3.9+
-- FastAPI
-- SQLAlchemy
-- Hugging Face Transformers
-- React (for frontend - coming soon)
+- Python 3.11
+- Node.js (for the frontend)
+- Docker + Docker Compose (for the full stack, including monitoring)
 
-### Installation
+### Backend
 
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd personal-chatbot
-
-# Install dependencies
 pip install -r requirements.txt
-
-# Run the application
 uvicorn src.api.main:app --reload
 ```
 
-## 📚 Learning Resources
+App: http://localhost:8000 — interactive docs at `/docs`, health at `/health`, metrics at `/metrics`.
 
-This project includes comprehensive learning materials in the `src/Learn/` directory:
+### Frontend
 
-- **[FastAPI Layers Guide](src/Learn/FastAPI_Layers.md)** - Complete architecture explanation
-- **[Controller Guide](src/Learn/CONTROLLER_GUIDE.md)** - Step-by-step controller implementation guide
+```bash
+cd src/ui
+npm install
+npm run dev
+```
 
-## 🔄 Development Progress
+Vite prints the local URL it binds to (this project pins a fixed dev port; check the
+terminal output for the exact address). It proxies `/api` requests to the backend on
+port 8000, so run the backend first.
 
-### Completed ✅
-- API Gateway setup
-- Rate Limiter
-- Router layer
-- Controller layer
-- DTO definitions
-- Basic chatbot processing
-- Query type detection
-- Vector database integration
+### Full stack via Docker Compose
 
-### In Progress 🚧
-- Enhanced validation
-- Token usage tracking
-- Task management features
-- Repository pattern implementation
+```bash
+cd Docker
+docker compose up -d --build
+```
 
-### Planned 📋
-- Response caching
-- Conversation memory
-- Long-term memory storage
-- React frontend
-- Authentication & authorization
-- Database migrations
+This brings up the app, Redis, and the full monitoring stack:
 
-## 🛠️ Technology Stack
+| Service | URL |
+|---|---|
+| App | http://localhost:8000 |
+| Prometheus | http://localhost:9090 |
+| Alertmanager | http://localhost:9093 |
+| Grafana | http://localhost:3001 (user `admin`, password from `GRAFANA_ADMIN_PASSWORD` in `.env`, defaults to `admin`) |
 
-- **Backend Framework**: FastAPI
-- **Database ORM**: SQLAlchemy
-- **LLM**: Hugging Face Transformers
-- **Vector Database**: (TBD - Chroma/PGVector)
-- **Frontend**: React (planned)
-- **Architecture**: Clean Architecture / N-Tier Architecture
+The React UI is **not** containerized — run it separately with `npm run dev` regardless of
+whether the backend runs bare or via Docker Compose.
 
-## 📝 API Endpoints
+## ⚙️ Configuration
 
-### Chat Endpoints
-- `POST /api/v1/chat` - Send a chat message
-- `GET /api/v1/history` - Retrieve chat history
+- **Secrets/env** — `.env` (gitignored, not committed): `OPENAI_API_KEY`, `OPENAI_MODEL_NAME`,
+  `OPENAI_TEMPERATURE`, `OPENAI_MAX_TOKENS`, `HF_TOKEN`, `LLM_PROVIDER`, plus `REDIS_URL` and
+  `GRAFANA_ADMIN_PASSWORD` used by the Docker stack.
+- **Non-secret tunables** — `src/config/config.yml` (model names, RAG `k`, history limits,
+  agent config), loaded via `src/utils/config.py`.
 
-### Health Check
-- `GET /health` - Health check endpoint
-- `GET /` - Welcome message
+## 📝 API endpoints
 
+All under `/api/v1`:
+
+| Method & path | What it does |
+|---|---|
+| `POST /chat` | Send a chat message |
+| `GET /history` | Retrieve chat history |
+| `POST /rag/upload` | Upload a PDF and (re-)build the RAG vector index |
+| `POST /rag/query` | Ask a question answered from the indexed PDFs |
+
+Plus `GET /`, `GET /health`, and `GET /metrics` at the root.
+
+## 🧪 Testing
+
+```bash
+pytest
+```
+
+Only `tests/business/rag/` is populated today (retrieval + re-ranker tests). No lint/format
+tooling is configured — match existing style by hand.
+
+## 📊 Monitoring & alerting
+
+Prometheus scrapes the app (`/metrics`), Redis (via `redis-exporter`), and container stats
+(via `cadvisor`). Alert rules live in `Docker/prometheus/alert_rules.yml` (API down, high
+error rate, high latency, rate-limit abuse, Redis down, container CPU/memory) and route
+through Alertmanager (`Docker/alertmanager/alertmanager.yml` — the receiver ships as a
+placeholder with no Slack/email/PagerDuty wired up; see the comments there to add one).
+Grafana auto-provisions a dashboard (`Docker/grafana/provisioning/dashboards/json/api-overview.json`)
+covering request rate/latency/errors, rate limiting, chat usage by model, RAG ingestion
+volume, and container resources.
+
+## 📚 Learning resources
+
+This project includes learning materials in `src/Learn/`:
+
+- **[FastAPI Layers Guide](src/Learn/FastAPI_Layers.md)** — architecture explanation
+- **[Controller Guide](src/Learn/CONTROLLER_GUIDE.md)** — controller implementation walkthrough
+- **[Comprehensive Learning Guide](src/Learn/COMPREHENSIVE_LEARNING_GUIDE.md)** — broader
+  concepts guide (some PDF-parsing examples there still reference the `unstructured` library
+  the RAG pipeline used previously; the pipeline itself now runs on Docling — see
+  `src/business/rag/pdfingest/README.md`)
+
+## 🛠️ Technology stack
+
+- **Backend**: FastAPI, Uvicorn, Pydantic DTOs
+- **LLM**: OpenAI API and/or Hugging Face Transformers (`LLM_PROVIDER` env var selects)
+- **Memory**: Redis (short-term, TTL-based) + longer-term history storage
+- **RAG**: Docling (PDF parsing) → chunking → Chroma (vector store) → retrieval → re-ranking
+- **Frontend**: React 18 + Vite
+- **Monitoring**: Prometheus, Grafana, Alertmanager (Docker Compose)
+
+## 🔄 Known gaps
+
+- `src/database/database.py` is **empty** — SQLAlchemy engine/session setup isn't
+  implemented yet. Chat history persistence currently goes through `src/memory/`
+  (Redis + long-term memory), not SQLAlchemy.
+- `src/api/service.py` is empty — unused placeholder.
+- No `.env.example` yet — create one with placeholder values if you add new required variables.
 
 ---
 
-**Note**: This project follows clean architecture principles and is designed for learning and production use. See the [Learning Resources](src/Learn/README.md) for detailed guides on each component.
+**Note**: Intended for learning and can be used in production with minor changes. See
+`src/Learn/` for detailed guides on each component.

@@ -7,7 +7,6 @@ ingest_pdfs → called by RAGController.upload (after file is saved to uploads d
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Dict, List
 
@@ -20,15 +19,9 @@ from src.utils.config import load_config
 
 load_dotenv()
 
-# Reflect whether the unstructured-client package is installed and the
-# UNSTRUCTURED_API_KEY env var is present — both are required for table OCR.
-try:
-    from src.business.rag.pdfingest.unstructure_pdf_digest import _TABLE_PROCESSING_AVAILABLE as _TPA
-except Exception:
-    _TPA = False
-
-_UNSTRUCTURED_KEY_SET = bool(os.getenv("UNSTRUCTURED_API_KEY"))
-TABLE_OCR_ENABLED: bool = _TPA and _UNSTRUCTURED_KEY_SET
+# Docling extracts table structure locally (no external API/key needed), so
+# table extraction is always available.
+TABLE_OCR_ENABLED: bool = True
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
