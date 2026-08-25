@@ -13,7 +13,7 @@ from typing import List, Tuple
 
 from dotenv import load_dotenv
 
-from .pdfingest.unstructure_pdf_digest import ingest_directory, IngestedDocument
+from .pdfingest.pdf_digest import ingest_directory, IngestedDocument
 from .pdfingest.chunk import Chunker, Chunk
 from ..core.embedding import OpenAIEmbedder
 from .vector_store import VectorStore
