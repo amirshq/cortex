@@ -56,6 +56,30 @@ groups:
           summary: "Sustained rate-limit rejections"
           description: "The token-bucket limiter has been rejecting more than 1 request/sec on average for 10 minutes ({{ $value | printf \"%.2f\" }}/s). Investigate possible abuse or a limiter that's too tight for real traffic."
 
+  - name: rag-quality
+    rules:
+      - alert: RAGRetrievalScoreDegraded
+        expr: histogram_quantile(0.5, sum(rate(rag_retrieval_top_score_bucket[30m])) by (le)) < 0.5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "RAG retrieval relevance has dropped"
+          description: "Median re-rank score of the top-matched chunk over the last 30m is {{ $value | printf \"%.2f\" }}, below the 0.5 quality floor (the re-ranker's hard relevance gate is 0.15). Retrieval quality may be degrading — check embedding/index freshness or whether queries have drifted from indexed content."
+
+      - alert: RAGRetrievalFallbackRateHigh
+        expr: >
+          sum(increase(rag_retrieval_low_confidence_total[1h]))
+          /
+          sum(increase(rag_queries_total[1h]))
+          > 0.3
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High rate of RAG queries falling back to low-confidence retrieval"
+          description: "More than 30% of RAG queries in the last hour found no chunk above the re-ranker's relevance gate ({{ $value | humanizePercentage }}), falling back to raw vector-similarity order. The re-ranker may be failing to match queries to indexed content."
+
   - name: dependencies
     rules:
       - alert: RedisDown

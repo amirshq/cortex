@@ -12,6 +12,11 @@ from typing import Dict, List
 
 from dotenv import load_dotenv
 
+from src.api.metrics import (
+    RAG_QUERIES_TOTAL,
+    RAG_RETRIEVAL_LOW_CONFIDENCE_TOTAL,
+    RAG_RETRIEVAL_TOP_SCORE,
+)
 from src.business.rag.retrieval import RAGPipeline
 from src.business.rag.index_builder import build_index
 from src.business.rag.vector_store import VectorStore
@@ -50,6 +55,16 @@ async def query_rag(question: str) -> Dict:
     """Run the full RAG pipeline: retrieve → rerank → generate."""
     pipeline = _make_pipeline()
     answer_text, selected_chunks = pipeline.answer(question)
+
+    RAG_QUERIES_TOTAL.inc()
+    # The top chunk only has rerank_score when the re-ranker found something
+    # above its relevance gate; otherwise select_context() fell back to raw
+    # vector order (plain RetrievedChunk, no rerank_score) — that fallback is
+    # itself the strongest signal that retrieval quality is degrading.
+    if selected_chunks and hasattr(selected_chunks[0], "rerank_score"):
+        RAG_RETRIEVAL_TOP_SCORE.observe(selected_chunks[0].rerank_score)
+    else:
+        RAG_RETRIEVAL_LOW_CONFIDENCE_TOTAL.inc()
 
     sources: List[Dict] = [
         {
