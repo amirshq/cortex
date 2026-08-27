@@ -19,7 +19,7 @@ from src.api.metrics import (
 )
 from src.business.rag.retrieval import RAGPipeline
 from src.business.rag.index_builder import build_index
-from src.business.rag.vector_store import VectorStore
+from src.business.rag.vector_store import create_vector_store
 from src.utils.config import load_config
 
 load_dotenv()
@@ -89,7 +89,7 @@ async def ingest_pdfs(uploads_dir: Path) -> Dict:
 
     # Wipe old chunks — upsert never deletes, so stale content from previous
     # uploads would otherwise persist and pollute query results.
-    VectorStore(persist_dir=str(persist_dir)).reset()
+    create_vector_store(persist_dir=str(persist_dir)).reset()
 
     docs_count, chunks_count = build_index(
         data_dir=uploads_dir,

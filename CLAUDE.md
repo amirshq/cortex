@@ -96,6 +96,28 @@ The React UI (`src/ui/`) is not containerized — run it separately with `npm ru
 - Non-secret tunables (model names, RAG `k`, history limits, agent config) live in
   `src/config/config.yml`, loaded via `src/utils/config.py`.
 
+### Provider selection (on-prem vs. cloud)
+
+Every swappable infra component is selected by its own env var, each defaulting to
+today's on-prem/local behavior so existing deployments need zero config changes:
+
+| Env var | Default (on-prem) | Alternative |
+|---|---|---|
+| `LLM_PROVIDER` | `openai` (cloud) | `huggingface` (fully local) · `azure_openai` (not yet implemented) |
+| `EMBEDDING_PROVIDER` | `openai` | `azure_openai` (not yet implemented) |
+| `VECTOR_STORE_PROVIDER` | `chroma` | `azure_search` (not yet implemented) |
+| `MEMORY_PROVIDER` | `redis` | `azure_redis` (not yet implemented) |
+
+Each factory lives next to the classes it selects between — `create_llm()` in
+`src/business/core/model.py`, `create_embedder()` in `src/business/core/embedding.py`,
+`create_vector_store()` in `src/business/rag/vector_store.py`, `create_memory()` in
+`src/memory/redis_memory.py`. Requesting a not-yet-implemented provider raises a clear
+`NotImplementedError` rather than silently falling back. Note: `src/memory/vectordb.py`
+(the chatbot's long-term/conversation-memory Chroma store, separate from the RAG vector
+store above) is **not yet wired into this pattern** — whether it shares an Azure AI
+Search index with the RAG store or gets its own is an open design question for when
+that integration lands.
+
 ## Testing
 
 - `pytest` — only `tests/business/rag/` is populated today (retrieval + re-ranker tests,

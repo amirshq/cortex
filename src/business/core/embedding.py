@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import time
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Optional
 
 from openai import OpenAI
 from openai import InternalServerError
@@ -59,3 +60,37 @@ class OpenAIEmbedder(Embedder):
 
     def embed_query(self, text: str) -> List[float]:
         return self._embed([text])[0]
+
+
+# ── Provider selection ────────────────────────────────────────────────────
+#
+# EMBEDDING_PROVIDER (env var) picks the embedding implementation. Defaults
+# to today's behavior — on-prem/local deployments don't need to set anything.
+#
+#   openai        (default) — OpenAI's cloud embeddings API.
+#   azure_openai  — Azure OpenAI Service embeddings. Not implemented yet.
+
+def create_embedder(
+    provider: Optional[str] = None,
+    *,
+    api_key: Optional[str] = None,
+    model: Optional[str] = None,
+) -> Embedder:
+    """Factory for the embedding model, selected by EMBEDDING_PROVIDER or `provider`."""
+    provider = (provider or os.getenv("EMBEDDING_PROVIDER", "openai")).strip().lower()
+
+    if provider == "openai":
+        resolved_key = api_key or os.getenv("OPENAI_API_KEY")
+        if not resolved_key:
+            raise RuntimeError("OPENAI_API_KEY must be set for EMBEDDING_PROVIDER=openai")
+        return OpenAIEmbedder(api_key=resolved_key, model=model or "text-embedding-3-small")
+
+    if provider == "azure_openai":
+        raise NotImplementedError(
+            "EMBEDDING_PROVIDER=azure_openai is not implemented yet. Use 'openai' for now."
+        )
+
+    raise ValueError(
+        f"Unknown EMBEDDING_PROVIDER={provider!r}. Supported: openai, "
+        "azure_openai (coming soon)."
+    )
