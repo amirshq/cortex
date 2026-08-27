@@ -1,12 +1,13 @@
 #Here is the openai LLM model implementation
 
+import os
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from abc import ABC, abstractmethod
 import torch
-from .prompt_builder import PromptBuilder 
+from .prompt_builder import PromptBuilder
 from openai import OpenAI
 from dotenv import load_dotenv
-from typing import List
+from typing import Optional
 load_dotenv()
 
 # Base LLM Interface
@@ -110,4 +111,50 @@ class OpenAIModel(BaseLLM):
             temperature=self.temperature
         )
         return response.choices[0].message.content.strip()
-    
+
+
+# ── Provider selection ────────────────────────────────────────────────────
+#
+# LLM_PROVIDER (env var) picks the chat model implementation. On-prem/local
+# deployments don't need to set anything — the default is today's behavior.
+#
+#   openai        (default) — OpenAI's cloud API. Current on-prem/as-is setup.
+#   huggingface   — fully local inference, no network calls at generation time.
+#   azure_openai  — Azure OpenAI Service. Not implemented yet.
+
+def create_llm(
+    provider: Optional[str] = None,
+    *,
+    model_name: Optional[str] = None,
+    system_prompt: str = "",
+    api_key: Optional[str] = None,
+) -> BaseLLM:
+    """Factory for the chat LLM, selected by LLM_PROVIDER or the `provider` arg."""
+    provider = (provider or os.getenv("LLM_PROVIDER", "openai")).strip().lower()
+
+    if provider == "openai":
+        resolved_key = api_key or os.getenv("OPENAI_API_KEY")
+        if not resolved_key:
+            raise RuntimeError("OPENAI_API_KEY must be set for LLM_PROVIDER=openai")
+        return OpenAIModel(
+            client=OpenAI(api_key=resolved_key),
+            model_name=model_name or os.getenv("OPENAI_MODEL_NAME", "gpt-4o"),
+            system_prompt=system_prompt,
+        )
+
+    if provider == "huggingface":
+        return LocalHFModel(
+            model_name=model_name or os.getenv("HF_MODEL_NAME", "mistral-7b-instruct-v0.1"),
+            system_prompt=system_prompt,
+        )
+
+    if provider == "azure_openai":
+        raise NotImplementedError(
+            "LLM_PROVIDER=azure_openai is not implemented yet. Use 'openai' or "
+            "'huggingface' for now."
+        )
+
+    raise ValueError(
+        f"Unknown LLM_PROVIDER={provider!r}. Supported: openai, huggingface, "
+        "azure_openai (coming soon)."
+    )

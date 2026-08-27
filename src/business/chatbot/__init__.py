@@ -17,9 +17,9 @@ from src.business.chatbot.agentic_chatbot import AgenticChatbot
 from src.database.dto import ChatMessageRequest, ChatHistoryRequest
 from src.memory.chat_history_manager import ChatHistoryManager
 from src.memory.long_term_memory import LongTermMemory
-from src.memory.redis_memory import RedisMemory
+from src.memory.redis_memory import create_memory
 from src.memory.vectordb import VectorDB
-from src.business.core.embedding import OpenAIEmbedder
+from src.business.core.embedding import create_embedder
 from src.utils.config import load_config
 
 load_dotenv()
@@ -65,13 +65,13 @@ def _make_chatbot(user_id: str) -> AgenticChatbot:
         collection_name="chat_history",
         persist_directory=str(vectordb_dir),
     )
-    embedder = OpenAIEmbedder(api_key=api_key)
+    embedder = create_embedder(api_key=api_key)
     long_term_memory = LongTermMemory(
         vectordb=vectordb,
         embedder=embedder,
         chunker=_IdentityChunker(),
     )
-    redis_memory = RedisMemory(url=redis_url)
+    redis_memory = create_memory(url=redis_url)
     chat_history_manager = ChatHistoryManager(db_path=str(db_path))
 
     return AgenticChatbot(
