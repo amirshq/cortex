@@ -18,7 +18,7 @@ from src.database.dto import ChatMessageRequest, ChatHistoryRequest
 from src.memory.chat_history_manager import ChatHistoryManager
 from src.memory.long_term_memory import LongTermMemory
 from src.memory.redis_memory import create_memory
-from src.memory.vectordb import VectorDB
+from src.memory.vectordb import create_conversation_vector_store
 from src.business.core.embedding import create_embedder
 from src.utils.config import load_config
 
@@ -61,7 +61,7 @@ def _make_chatbot(user_id: str) -> AgenticChatbot:
     # SQLite path — anchored to project root
     db_path = _resolve(os.getenv("SQLITE_DB_PATH") or dirs.get("db_path", "data/chatbot.db"))
 
-    vectordb = VectorDB(
+    vectordb = create_conversation_vector_store(
         collection_name="chat_history",
         persist_directory=str(vectordb_dir),
     )

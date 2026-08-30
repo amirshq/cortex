@@ -28,6 +28,7 @@ from typing import Dict, List, Optional
 from dotenv import load_dotenv
 from openai import OpenAI
 
+from src.business.core.model import build_azure_openai_client
 from src.business.core.prompt_builder import build_agentic_system_prompt
 from src.memory.chat_history_manager import ChatHistoryManager
 from src.memory.long_term_memory import LongTermMemory
@@ -98,16 +99,38 @@ class AgenticChatbot:
         config = load_config()
         llm_config = config.get("llm_config") or {}
 
-        resolved_key = api_key or os.getenv("OPENAI_API_KEY")
-        if not resolved_key:
-            raise RuntimeError("OPENAI_API_KEY must be set in environment or passed to __init__")
+        # LLM_PROVIDER selects the client for this tool-calling loop, same
+        # switch used by create_llm() elsewhere. Local Hugging Face models
+        # don't support this agent's function-calling flow, so that provider
+        # isn't valid here.
+        provider = os.getenv("LLM_PROVIDER", "openai").strip().lower()
 
-        self.client = OpenAI(api_key=resolved_key)
-        self.model_name = (
-            model_name
-            or llm_config.get("chat_model")
-            or "gpt-4o"
-        )
+        if provider == "openai":
+            resolved_key = api_key or os.getenv("OPENAI_API_KEY")
+            if not resolved_key:
+                raise RuntimeError("OPENAI_API_KEY must be set in environment or passed to __init__")
+            self.client = OpenAI(api_key=resolved_key)
+            self.model_name = (
+                model_name
+                or llm_config.get("chat_model")
+                or "gpt-4o"
+            )
+
+        elif provider == "azure_openai":
+            deployment = model_name or os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME")
+            if not deployment:
+                raise RuntimeError(
+                    "LLM_PROVIDER=azure_openai requires AZURE_OPENAI_CHAT_DEPLOYMENT_NAME."
+                )
+            self.client = build_azure_openai_client(api_key)
+            self.model_name = deployment
+
+        else:
+            raise NotImplementedError(
+                f"AgenticChatbot's tool-calling loop only supports LLM_PROVIDER in "
+                f"('openai', 'azure_openai') — got {provider!r}. Local Hugging Face "
+                "models don't support this agent's function-calling flow."
+            )
 
     # ---------------------------------------------------------- tool dispatch
     def _handle_tool_call(self, tool_name: str, tool_args: Dict) -> str:

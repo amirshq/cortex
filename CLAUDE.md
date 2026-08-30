@@ -103,20 +103,55 @@ today's on-prem/local behavior so existing deployments need zero config changes:
 
 | Env var | Default (on-prem) | Alternative |
 |---|---|---|
-| `LLM_PROVIDER` | `openai` (cloud) | `huggingface` (fully local) · `azure_openai` (not yet implemented) |
-| `EMBEDDING_PROVIDER` | `openai` | `azure_openai` (not yet implemented) |
-| `VECTOR_STORE_PROVIDER` | `chroma` | `azure_search` (not yet implemented) |
-| `MEMORY_PROVIDER` | `redis` | `azure_redis` (not yet implemented) |
+| `LLM_PROVIDER` | `openai` (cloud) | `huggingface` (fully local) · `azure_openai` |
+| `EMBEDDING_PROVIDER` | `openai` | `azure_openai` |
+| `VECTOR_STORE_PROVIDER` | `chroma` | `azure_search` — RAG chunks index |
+| `CHAT_VECTOR_STORE_PROVIDER` | `chroma` | `azure_search` (not yet implemented) — conversation-memory index |
+| `MEMORY_PROVIDER` | `redis` | `azure_redis` |
 
 Each factory lives next to the classes it selects between — `create_llm()` in
 `src/business/core/model.py`, `create_embedder()` in `src/business/core/embedding.py`,
 `create_vector_store()` in `src/business/rag/vector_store.py`, `create_memory()` in
-`src/memory/redis_memory.py`. Requesting a not-yet-implemented provider raises a clear
-`NotImplementedError` rather than silently falling back. Note: `src/memory/vectordb.py`
-(the chatbot's long-term/conversation-memory Chroma store, separate from the RAG vector
-store above) is **not yet wired into this pattern** — whether it shares an Azure AI
-Search index with the RAG store or gets its own is an open design question for when
-that integration lands.
+`src/memory/redis_memory.py`, `create_conversation_vector_store()` in
+`src/memory/vectordb.py`. Requesting a not-yet-implemented provider raises a clear
+`NotImplementedError` rather than silently falling back.
+
+`azure_openai` (LLM + embeddings) is implemented — needs `AZURE_OPENAI_ENDPOINT`,
+`AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_API_VERSION`, and per-component deployment names
+(`AZURE_OPENAI_CHAT_DEPLOYMENT_NAME` / `AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME`) in
+`.env`. `build_azure_openai_client()` in `model.py` is the shared client builder used by
+both `create_llm()` and `AgenticChatbot`'s tool-calling loop (which needs a raw client,
+not the `BaseLLM` wrapper, because it does OpenAI-style function calling). Note:
+`AgenticChatbot` now raises `NotImplementedError` if `LLM_PROVIDER=huggingface` — it
+always silently used OpenAI regardless of that setting before this was wired up, so this
+is a deliberate small behavior change (fail loud instead of silently ignoring the
+setting), not a regression.
+
+`azure_redis` is implemented — needs `AZURE_REDIS_CONNECTION_STRING` in `.env`, a single
+`rediss://:<access-key>@<name>.redis.cache.windows.net:6380/0` URL. Azure Cache for Redis
+is Redis-protocol-compatible, so this reuses `RedisMemory` completely unchanged — the
+factory just points it at a TLS URL instead of a plain `redis://` one and rejects
+anything not using the `rediss://` scheme (Azure requires TLS).
+
+`azure_search` for the RAG chunks index is implemented (`AzureSearchVectorStore` in
+`vector_store.py`) — needs `AZURE_SEARCH_ENDPOINT`, `AZURE_SEARCH_API_KEY`, and
+`AZURE_SEARCH_INDEX_NAME`/`AZURE_SEARCH_EMBEDDING_DIM` (both have sensible defaults) in
+`.env`. Needs Basic tier or above (Free tier has no vector search). The `azure-search-documents`
+SDK is imported lazily inside the class (not at module level) so Chroma-only deployments
+never need it installed, even though it's in `requirements.txt` unconditionally. The index
+is created automatically on first use if missing; `reset()` drops and recreates it, matching
+`ChromaVectorStore.reset()`'s semantics. Note: `query()` translates Azure Search's response
+into the exact same nested-list dict shape Chroma's `.query()` returns (`{"ids": [[...]],
+...}`) — `retrieval.py`'s `_retrieve()` depends on that specific structure regardless of
+backend, so this translation layer is required, not incidental.
+
+`CHAT_VECTOR_STORE_PROVIDER=azure_search` (conversation-memory index) is **not yet
+implemented** — that's step 4b, a second index with a different schema
+(`user_id`/`importance`/`created_at` instead of `source_id`/`chunk_start`/`section`).
+
+RAG chunks and conversation memory deliberately use **two separate vector stores/indexes**
+(`VECTOR_STORE_PROVIDER` vs. `CHAT_VECTOR_STORE_PROVIDER`) — they're different data with
+different metadata shapes, not one index shared for two purposes.
 
 ## Testing
 
