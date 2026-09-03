@@ -30,6 +30,7 @@ from openai import OpenAI
 
 from src.business.core.model import build_azure_openai_client
 from src.business.core.prompt_builder import build_agentic_system_prompt
+from src.business.core.live_data import create_live_data_provider, LiveDataProvider
 from src.memory.chat_history_manager import ChatHistoryManager
 from src.memory.long_term_memory import LongTermMemory
 from src.memory.redis_memory import RedisMemory
@@ -74,6 +75,28 @@ class AgenticChatbot:
                     "required": ["query"],
                 },
             },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "web_search",
+                "description": (
+                    "Search the web for current information, news, or real-time data. "
+                    "Use this when the user asks about current events, recent news, "
+                    "or information that changes frequently (e.g., 'What's in the news?', "
+                    "'latest updates on X topic')."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Search query (e.g., 'latest AI news', 'weather NYC', 'trending today')",
+                        }
+                    },
+                    "required": ["query"],
+                },
+            },
         }
     ]
 
@@ -87,6 +110,7 @@ class AgenticChatbot:
         user_info: Optional[Dict] = None,
         api_key: Optional[str] = None,
         model_name: Optional[str] = None,
+        live_data_provider: Optional[LiveDataProvider] = None,
     ) -> None:
         load_dotenv()
 
@@ -95,6 +119,7 @@ class AgenticChatbot:
         self.user_id = user_id
         self.chat_history_manager = chat_history_manager
         self.user_info = user_info or {}
+        self.live_data_provider = live_data_provider or create_live_data_provider()
 
         config = load_config()
         llm_config = config.get("llm_config") or {}
@@ -142,6 +167,32 @@ class AgenticChatbot:
             if not results:
                 return "No relevant past conversations found."
             return "\n\n".join(r["text"] for r in results)
+
+        if tool_name == "web_search":
+            try:
+                results = self.live_data_provider.search(
+                    query=tool_args["query"],
+                    limit=5,
+                )
+                if not results:
+                    return f"No search results found for '{tool_args['query']}'."
+
+                # Format results as readable text
+                formatted_results = []
+                for i, result in enumerate(results, 1):
+                    title = result.get("title", "")
+                    summary = result.get("summary", "")
+                    source = result.get("source", "Unknown")
+                    url = result.get("url", "")
+
+                    text = f"{i}. {title}\n   Source: {source}\n   {summary}"
+                    if url:
+                        text += f"\n   URL: {url}"
+                    formatted_results.append(text)
+
+                return "\n\n".join(formatted_results)
+            except Exception as e:
+                return f"Web search failed: {str(e)}"
 
         return f"Unknown tool: {tool_name}"
 

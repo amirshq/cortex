@@ -130,12 +130,12 @@ def ingest_directory(
     include_table_images: bool = True,
     pdf_strategy: str = "hi_res",
 ) -> List[IngestedDocument]:
-    """Ingest all PDFs in a directory and return structured results.
-    pdf_strategy: 'hi_res' (OCR on, slower) | 'fast' (no OCR).
+    """Ingest all PDFs in a directory and its subdirectories, and return
+    structured results. pdf_strategy: 'hi_res' (OCR on, slower) | 'fast' (no OCR).
     """
-    pdf_files = list(Path(data_dir).glob("*.pdf"))
+    pdf_files = list(Path(data_dir).rglob("*.pdf"))
     if not pdf_files:
-        raise FileNotFoundError(f"No PDF files found in {data_dir}")
+        raise FileNotFoundError(f"No PDF files found in {data_dir} (searched recursively)")
 
     results: List[IngestedDocument] = []
     for pdf_path in pdf_files:

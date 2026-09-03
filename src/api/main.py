@@ -6,7 +6,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from src.api.metrics import prometheus_middleware
 from src.api.router import router
 
-app = FastAPI(title="personal chatbot", version="1.0.0")
+app = FastAPI(title="Cortex", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -29,7 +29,7 @@ def metrics():
 
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to the personal chatbot API!"}
+    return {"message": "Welcome to the Cortex API!"}
 
 
 @app.get("/health")
