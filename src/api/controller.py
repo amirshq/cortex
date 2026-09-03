@@ -13,6 +13,12 @@ from src.database.dto import (
     RAGQueryResponse,
     RAGUploadResponse,
 )
+from src.api.metrics import (
+    CHAT_MODEL_REQUESTS_TOTAL,
+    CHAT_TOKENS_TOTAL,
+    RAG_CHUNKS_INDEXED_TOTAL,
+    RAG_DOCUMENTS_INDEXED_TOTAL,
+)
 from src.business.chatbot import process_chat_message, get_chat_history
 from src.business.rag import query_rag, ingest_pdfs
 
@@ -40,12 +46,18 @@ class ChatController:
             if isinstance(result, dict):
                 # Extract reply from result
                 reply = result.get("reply", "I'm sorry, I couldn't process that.")
-                
+                model_used = result.get("model_used", "zephyr-7b-beta")
+                tokens_used = result.get("tokens_used")
+
+                CHAT_MODEL_REQUESTS_TOTAL.labels(model=model_used).inc()
+                if tokens_used:
+                    CHAT_TOKENS_TOTAL.labels(model=model_used).inc(tokens_used)
+
                 return ChatMessageResponse(
                     reply=reply,
                     session_id=request.session_id,
-                    model_used=result.get("model_used", "zephyr-7b-beta"),
-                    tokens_used=result.get("tokens_used")
+                    model_used=model_used,
+                    tokens_used=tokens_used
                 )
             else:
                 # If business logic already returns ChatMessageResponse
@@ -153,6 +165,8 @@ class RAGController:
                 shutil.copyfileobj(file.file, f)
 
             result = await ingest_pdfs(uploads_dir)
+            RAG_DOCUMENTS_INDEXED_TOTAL.inc(result["docs_indexed"])
+            RAG_CHUNKS_INDEXED_TOTAL.inc(result["chunks_indexed"])
             return RAGUploadResponse(
                 filename=file.filename,
                 docs_indexed=result["docs_indexed"],

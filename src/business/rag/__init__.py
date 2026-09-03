@@ -7,28 +7,26 @@ ingest_pdfs → called by RAGController.upload (after file is saved to uploads d
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Dict, List
 
 from dotenv import load_dotenv
 
+from src.api.metrics import (
+    RAG_QUERIES_TOTAL,
+    RAG_RETRIEVAL_LOW_CONFIDENCE_TOTAL,
+    RAG_RETRIEVAL_TOP_SCORE,
+)
 from src.business.rag.retrieval import RAGPipeline
 from src.business.rag.index_builder import build_index
-from src.business.rag.vector_store import VectorStore
+from src.business.rag.vector_store import create_vector_store
 from src.utils.config import load_config
 
 load_dotenv()
 
-# Reflect whether the unstructured-client package is installed and the
-# UNSTRUCTURED_API_KEY env var is present — both are required for table OCR.
-try:
-    from src.business.rag.pdfingest.unstructure_pdf_digest import _TABLE_PROCESSING_AVAILABLE as _TPA
-except Exception:
-    _TPA = False
-
-_UNSTRUCTURED_KEY_SET = bool(os.getenv("UNSTRUCTURED_API_KEY"))
-TABLE_OCR_ENABLED: bool = _TPA and _UNSTRUCTURED_KEY_SET
+# Docling extracts table structure locally (no external API/key needed), so
+# table extraction is always available.
+TABLE_OCR_ENABLED: bool = True
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
@@ -58,6 +56,16 @@ async def query_rag(question: str) -> Dict:
     pipeline = _make_pipeline()
     answer_text, selected_chunks = pipeline.answer(question)
 
+    RAG_QUERIES_TOTAL.inc()
+    # The top chunk only has rerank_score when the re-ranker found something
+    # above its relevance gate; otherwise select_context() fell back to raw
+    # vector order (plain RetrievedChunk, no rerank_score) — that fallback is
+    # itself the strongest signal that retrieval quality is degrading.
+    if selected_chunks and hasattr(selected_chunks[0], "rerank_score"):
+        RAG_RETRIEVAL_TOP_SCORE.observe(selected_chunks[0].rerank_score)
+    else:
+        RAG_RETRIEVAL_LOW_CONFIDENCE_TOTAL.inc()
+
     sources: List[Dict] = [
         {
             "text": chunk.text[:400],
@@ -81,7 +89,7 @@ async def ingest_pdfs(uploads_dir: Path) -> Dict:
 
     # Wipe old chunks — upsert never deletes, so stale content from previous
     # uploads would otherwise persist and pollute query results.
-    VectorStore(persist_dir=str(persist_dir)).reset()
+    create_vector_store(persist_dir=str(persist_dir)).reset()
 
     docs_count, chunks_count = build_index(
         data_dir=uploads_dir,

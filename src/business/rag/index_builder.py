@@ -7,16 +7,15 @@ Stores → saves to vector database (line 78)
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import List, Tuple
 
 from dotenv import load_dotenv
 
-from .pdfingest.unstructure_pdf_digest import ingest_directory, IngestedDocument
+from .pdfingest.pdf_digest import ingest_directory, IngestedDocument
 from .pdfingest.chunk import Chunker, Chunk
-from ..core.embedding import OpenAIEmbedder
-from .vector_store import VectorStore
+from ..core.embedding import create_embedder
+from .vector_store import create_vector_store
 
 
 def _chunk_document(doc: IngestedDocument, chunker: Chunker, table_start_idx: int | None) -> List[Chunk]:
@@ -46,9 +45,6 @@ def build_index(
     Returns (docs_indexed, chunks_indexed).
     """
     load_dotenv()
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY missing in environment")
 
     docs = ingest_directory(
         data_dir=data_dir,
@@ -58,7 +54,7 @@ def build_index(
     )
     print(f"📄 Chunking {len(docs)} document(s)...", flush=True)
 
-    embedder = OpenAIEmbedder(api_key=api_key)
+    embedder = create_embedder()
     chunker = Chunker(chunk_size=chunk_size, overlap=overlap)
 
     all_chunks: List[Chunk] = []
@@ -91,8 +87,8 @@ def build_index(
         texts = [c.text for c in batch]
         embeddings = embedder.embed_documents(texts)
         if vstore is None:
-            print("🔗 Connecting to ChromaDB...", flush=True)
-            vstore = VectorStore(persist_dir=str(persist_dir))
+            print("🔗 Connecting to vector store...", flush=True)
+            vstore = create_vector_store(persist_dir=str(persist_dir))
         ids = [c.chunk_id for c in batch]
         metadatas = [c.metadata for c in batch]
         vstore.upsert(ids=ids, embeddings=embeddings, metadatas=metadatas, documents=texts)

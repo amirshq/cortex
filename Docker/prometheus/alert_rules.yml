@@ -1,0 +1,112 @@
+groups:
+  - name: api-availability
+    rules:
+      - alert: APIDown
+        expr: up{job="personal-chatbot-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Personal chatbot API is down"
+          description: "Prometheus has not been able to scrape {{ $labels.instance }} (job {{ $labels.job }}) for 1 minute."
+
+      - alert: PrometheusTargetMissing
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Scrape target {{ $labels.job }}/{{ $labels.instance }} is down"
+          description: "{{ $labels.job }} ({{ $labels.instance }}) has been unreachable for 2 minutes."
+
+  - name: api-performance
+    rules:
+      - alert: APIHighErrorRate
+        expr: >
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total[5m]))
+          > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High 5xx error rate on the chatbot API"
+          description: "More than 5% of HTTP requests have returned 5xx over the last 5 minutes (current: {{ $value | humanizePercentage }})."
+
+      - alert: APIHighLatencyP95
+        expr: >
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, path))
+          > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High p95 latency on {{ $labels.path }}"
+          description: "p95 request latency for {{ $labels.path }} has been above 2s for 5 minutes (current: {{ $value | humanizeDuration }})."
+
+  - name: rate-limiting
+    rules:
+      - alert: HighRateLimitRejectionRate
+        expr: rate(rate_limit_rejections_total[5m]) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sustained rate-limit rejections"
+          description: "The token-bucket limiter has been rejecting more than 1 request/sec on average for 10 minutes ({{ $value | printf \"%.2f\" }}/s). Investigate possible abuse or a limiter that's too tight for real traffic."
+
+  - name: rag-quality
+    rules:
+      - alert: RAGRetrievalScoreDegraded
+        expr: histogram_quantile(0.5, sum(rate(rag_retrieval_top_score_bucket[30m])) by (le)) < 0.5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "RAG retrieval relevance has dropped"
+          description: "Median re-rank score of the top-matched chunk over the last 30m is {{ $value | printf \"%.2f\" }}, below the 0.5 quality floor (the re-ranker's hard relevance gate is 0.15). Retrieval quality may be degrading — check embedding/index freshness or whether queries have drifted from indexed content."
+
+      - alert: RAGRetrievalFallbackRateHigh
+        expr: >
+          sum(increase(rag_retrieval_low_confidence_total[1h]))
+          /
+          sum(increase(rag_queries_total[1h]))
+          > 0.3
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High rate of RAG queries falling back to low-confidence retrieval"
+          description: "More than 30% of RAG queries in the last hour found no chunk above the re-ranker's relevance gate ({{ $value | humanizePercentage }}), falling back to raw vector-similarity order. The re-ranker may be failing to match queries to indexed content."
+
+  - name: dependencies
+    rules:
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis is unreachable"
+          description: "redis_exporter reports Redis as down for 1 minute. Short-term chat memory will be unavailable."
+
+  - name: container-resources
+    rules:
+      - alert: ContainerHighMemoryUsage
+        expr: container_memory_usage_bytes{name=~"personal-chatbot-.*"} > 1e9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} using > 1GB memory"
+          description: "{{ $labels.name }} has used more than 1GB of memory for 5 minutes (current: {{ $value | humanize1024 }}B)."
+
+      - alert: ContainerHighCPUUsage
+        expr: sum(rate(container_cpu_usage_seconds_total{name=~"personal-chatbot-.*"}[5m])) by (name) > 0.9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} sustained high CPU"
+          description: "{{ $labels.name }} has used more than 90% of a CPU core on average for 10 minutes."
