@@ -36,7 +36,7 @@ def rebuild(
     data_dir: Path = typer.Option("src/business/rag/data", help="Directory with PDFs"),
     persist_dir: Path = typer.Option("src/business/rag/vectorstore", help="Chroma persistence directory"),
     max_context_chars: int = typer.Option(12_000, help="Max combined text per document"),
-    include_table_images: bool = typer.Option(True, help="Process table images via Unstructured API if configured"),
+    include_table_images: bool = typer.Option(True, help="Extract table structure via Docling (runs locally, no API key needed)"),
     pdf_strategy: str = typer.Option("hi_res", help="PDF strategy: 'hi_res' (OCR, slower) | 'fast' (no OCR, faster)"),
     chunk_size: int = typer.Option(800, help="Chunk size (characters)"),
     overlap: int = typer.Option(100, help="Chunk overlap (characters)"),

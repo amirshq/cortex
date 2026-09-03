@@ -175,6 +175,8 @@ Icon
 Network Trash Folder
 Temporary Items
 .apdisk
+data/rag_uploads/
+data/rag_vectorstore/
 
 # Windows
 Thumbs.db

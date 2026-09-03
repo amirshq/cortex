@@ -2,21 +2,19 @@
 
 from __future__ import annotations
 
-import os
 from typing import List, Tuple
 
 from dotenv import load_dotenv
-from openai import OpenAI
 
-from ..core.embedding import OpenAIEmbedder
-from .vector_store import VectorStore
+from ..core.embedding import create_embedder
+from .vector_store import create_vector_store
 from .re_ranker.interface import RetrievedChunk, ReRankedChunk
 from .re_ranker.re_ranker import ReRanker
 from .re_ranker.config import ReRankerConfig
 from .re_ranker.cross_encoder import CrossEncoderReRanker
 from .re_ranker.orchestrator import select_context
 from ..core.prompt_builder import PromptBuilder
-from ..core.model import OpenAIModel
+from ..core.model import create_llm
 
 
 class RAGPipeline:
@@ -29,19 +27,19 @@ class RAGPipeline:
         model_name: str = "gpt-4o-mini",
     ):
         load_dotenv()
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise RuntimeError("OPENAI_API_KEY missing in environment")
 
-        self.embedder = OpenAIEmbedder(api_key=api_key)
-        self.vector_store = VectorStore(persist_dir=persist_dir, collection_name=collection_name)
+        # Each factory reads its own *_PROVIDER env var (defaulting to
+        # today's OpenAI-based behavior) and only requires the credentials
+        # its selected provider actually needs.
+        self.embedder = create_embedder()
+        self.vector_store = create_vector_store(persist_dir=persist_dir, collection_name=collection_name)
 
         scorer = CrossEncoderReRanker(reranker_config or ReRankerConfig())
         self.reranker = ReRanker(scorer=scorer, config=reranker_config or ReRankerConfig())
 
         self.reranker_config = reranker_config or ReRankerConfig()
         self.prompt_builder = PromptBuilder(system_prompt)
-        self.llm = OpenAIModel(client=OpenAI(api_key=api_key), model_name=model_name, system_prompt=system_prompt)
+        self.llm = create_llm(model_name=model_name, system_prompt=system_prompt)
 
     def _retrieve(self, query: str, top_k: int = 30) -> List[RetrievedChunk]:
         q_emb = self.embedder.embed_query(query)
