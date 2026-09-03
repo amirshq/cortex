@@ -28,7 +28,9 @@ from typing import Dict, List, Optional
 from dotenv import load_dotenv
 from openai import OpenAI
 
+from src.business.core.model import build_azure_openai_client
 from src.business.core.prompt_builder import build_agentic_system_prompt
+from src.business.core.live_data import create_live_data_provider, LiveDataProvider
 from src.memory.chat_history_manager import ChatHistoryManager
 from src.memory.long_term_memory import LongTermMemory
 from src.memory.redis_memory import RedisMemory
@@ -73,6 +75,28 @@ class AgenticChatbot:
                     "required": ["query"],
                 },
             },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "web_search",
+                "description": (
+                    "Search the web for current information, news, or real-time data. "
+                    "Use this when the user asks about current events, recent news, "
+                    "or information that changes frequently (e.g., 'What's in the news?', "
+                    "'latest updates on X topic')."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Search query (e.g., 'latest AI news', 'weather NYC', 'trending today')",
+                        }
+                    },
+                    "required": ["query"],
+                },
+            },
         }
     ]
 
@@ -86,6 +110,7 @@ class AgenticChatbot:
         user_info: Optional[Dict] = None,
         api_key: Optional[str] = None,
         model_name: Optional[str] = None,
+        live_data_provider: Optional[LiveDataProvider] = None,
     ) -> None:
         load_dotenv()
 
@@ -94,20 +119,43 @@ class AgenticChatbot:
         self.user_id = user_id
         self.chat_history_manager = chat_history_manager
         self.user_info = user_info or {}
+        self.live_data_provider = live_data_provider or create_live_data_provider()
 
         config = load_config()
         llm_config = config.get("llm_config") or {}
 
-        resolved_key = api_key or os.getenv("OPENAI_API_KEY")
-        if not resolved_key:
-            raise RuntimeError("OPENAI_API_KEY must be set in environment or passed to __init__")
+        # LLM_PROVIDER selects the client for this tool-calling loop, same
+        # switch used by create_llm() elsewhere. Local Hugging Face models
+        # don't support this agent's function-calling flow, so that provider
+        # isn't valid here.
+        provider = os.getenv("LLM_PROVIDER", "openai").strip().lower()
 
-        self.client = OpenAI(api_key=resolved_key)
-        self.model_name = (
-            model_name
-            or llm_config.get("chat_model")
-            or "gpt-4o"
-        )
+        if provider == "openai":
+            resolved_key = api_key or os.getenv("OPENAI_API_KEY")
+            if not resolved_key:
+                raise RuntimeError("OPENAI_API_KEY must be set in environment or passed to __init__")
+            self.client = OpenAI(api_key=resolved_key)
+            self.model_name = (
+                model_name
+                or llm_config.get("chat_model")
+                or "gpt-4o"
+            )
+
+        elif provider == "azure_openai":
+            deployment = model_name or os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME")
+            if not deployment:
+                raise RuntimeError(
+                    "LLM_PROVIDER=azure_openai requires AZURE_OPENAI_CHAT_DEPLOYMENT_NAME."
+                )
+            self.client = build_azure_openai_client(api_key)
+            self.model_name = deployment
+
+        else:
+            raise NotImplementedError(
+                f"AgenticChatbot's tool-calling loop only supports LLM_PROVIDER in "
+                f"('openai', 'azure_openai') — got {provider!r}. Local Hugging Face "
+                "models don't support this agent's function-calling flow."
+            )
 
     # ---------------------------------------------------------- tool dispatch
     def _handle_tool_call(self, tool_name: str, tool_args: Dict) -> str:
@@ -119,6 +167,32 @@ class AgenticChatbot:
             if not results:
                 return "No relevant past conversations found."
             return "\n\n".join(r["text"] for r in results)
+
+        if tool_name == "web_search":
+            try:
+                results = self.live_data_provider.search(
+                    query=tool_args["query"],
+                    limit=5,
+                )
+                if not results:
+                    return f"No search results found for '{tool_args['query']}'."
+
+                # Format results as readable text
+                formatted_results = []
+                for i, result in enumerate(results, 1):
+                    title = result.get("title", "")
+                    summary = result.get("summary", "")
+                    source = result.get("source", "Unknown")
+                    url = result.get("url", "")
+
+                    text = f"{i}. {title}\n   Source: {source}\n   {summary}"
+                    if url:
+                        text += f"\n   URL: {url}"
+                    formatted_results.append(text)
+
+                return "\n\n".join(formatted_results)
+            except Exception as e:
+                return f"Web search failed: {str(e)}"
 
         return f"Unknown tool: {tool_name}"
 

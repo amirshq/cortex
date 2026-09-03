@@ -1,13 +1,13 @@
 {
-  "title": "Personal Chatbot - Overview",
+  "title": "Cortex - Overview",
   "uid": "personal-chatbot-overview",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "editable": true,
   "timezone": "browser",
   "time": { "from": "now-6h", "to": "now" },
   "refresh": "30s",
-  "tags": ["personal-chatbot"],
+  "tags": ["cortex", "personal-chatbot"],
   "panels": [
     {
       "id": 1,
@@ -258,6 +258,98 @@
         }
       ],
       "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] }
+    },
+    {
+      "id": 16,
+      "type": "stat",
+      "title": "Total LLM cost (USD)",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 46 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(chat_cost_total)", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "currencyUSD", "decimals": 2 },
+        "overrides": []
+      }
+    },
+    {
+      "id": 17,
+      "type": "stat",
+      "title": "Total embedding cost (USD)",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 46 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(embedding_cost_total)", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "currencyUSD", "decimals": 4 },
+        "overrides": []
+      }
+    },
+    {
+      "id": 18,
+      "type": "stat",
+      "title": "Cost per request (avg)",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 46 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(chat_cost_total) / sum(chat_model_requests_total)",
+          "legendFormat": "USD/request",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "currencyUSD", "decimals": 6 },
+        "overrides": []
+      }
+    },
+    {
+      "id": 19,
+      "type": "stat",
+      "title": "Embedding requests (total)",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 46 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(embedding_requests_total)", "refId": "A" }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "LLM cost over time by model",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 52 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(chat_cost_total[5m])) by (model)",
+          "legendFormat": "{{model}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "currencyUSD" },
+        "overrides": []
+      }
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Embedding cost over time",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 52 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(embedding_cost_total[5m])",
+          "legendFormat": "cost/sec",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "currencyUSD" },
+        "overrides": []
+      }
     }
   ]
 }

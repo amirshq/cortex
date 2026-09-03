@@ -117,7 +117,7 @@ export default function App() {
         <div className="header-inner">
           <div className="header-avatar">🤖</div>
           <div className="header-info">
-            <h1>{mode === "rag" ? "RAG · PDF Q&A" : (activeSession?.title || "Personal Chatbot")}</h1>
+            <h1>{mode === "rag" ? "RAG · PDF Q&A" : (activeSession?.title || "Cortex")}</h1>
             <div className="header-status">
               <span className="status-dot" />
               Online

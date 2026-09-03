@@ -1422,7 +1422,7 @@ FastAPI is the de facto standard for Python APIs in 2024-2025. Key features:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="Personal Chatbot API", version="1.0.0")
+app = FastAPI(title="Cortex API", version="1.0.0")
 
 # CORS — required for browser-based frontends
 app.add_middleware(

@@ -16,11 +16,16 @@ from src.database.dto import (
 from src.api.metrics import (
     CHAT_MODEL_REQUESTS_TOTAL,
     CHAT_TOKENS_TOTAL,
+    CHAT_COST_TOTAL,
+    EMBEDDING_REQUESTS_TOTAL,
+    EMBEDDING_COST_TOTAL,
     RAG_CHUNKS_INDEXED_TOTAL,
     RAG_DOCUMENTS_INDEXED_TOTAL,
 )
 from src.business.chatbot import process_chat_message, get_chat_history
 from src.business.rag import query_rag, ingest_pdfs
+from src.business.core.cost import calculate_chat_cost
+import os
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -48,10 +53,24 @@ class ChatController:
                 reply = result.get("reply", "I'm sorry, I couldn't process that.")
                 model_used = result.get("model_used", "zephyr-7b-beta")
                 tokens_used = result.get("tokens_used")
+                input_tokens = result.get("input_tokens", 0)
+                output_tokens = result.get("output_tokens", 0)
 
                 CHAT_MODEL_REQUESTS_TOTAL.labels(model=model_used).inc()
                 if tokens_used:
                     CHAT_TOKENS_TOTAL.labels(model=model_used).inc(tokens_used)
+
+                # Calculate and record cost (if tokens available)
+                if input_tokens or output_tokens:
+                    provider = os.getenv("LLM_PROVIDER", "openai").strip().lower()
+                    cost = calculate_chat_cost(
+                        model_name=model_used,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        provider=provider,
+                    )
+                    if cost > 0:
+                        CHAT_COST_TOTAL.labels(model=model_used).inc(cost)
 
                 return ChatMessageResponse(
                     reply=reply,

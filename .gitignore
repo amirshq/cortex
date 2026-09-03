@@ -177,6 +177,7 @@ Temporary Items
 .apdisk
 data/rag_uploads/
 data/rag_vectorstore/
+data/library/
 
 # Windows
 Thumbs.db
