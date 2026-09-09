@@ -1,0 +1,1001 @@
+CORTEX — WHAT EACH TEST ACTUALLY CHECKS AND WHAT IT PRODUCED
+=============================================================
+Generated: 2026-09-04
+Suite:     158 tests, 158 passed, 0 failed, 0 warnings, 13.34s
+Command:   python3 -m pytest tests/ -v
+Companion: test_results.txt (raw pytest output + per-file totals)
+
+
+READ THIS FIRST — what "output" means here
+------------------------------------------
+A passing pytest test produces no printed output. That is by design: pytest
+captures stdout/stderr and discards it unless a test fails. So for your example
+
+    tests/business/rag/re_ranker/test_re_ranker.py::test_reranker_sorts_by_rerank_score PASSED [ 97%]
+
+the literal output is exactly the word PASSED. There is no hidden return value,
+no number, no text. "PASSED" means every `assert` in that function evaluated
+true and the function returned without raising.
+
+What you almost certainly want instead is: what did the test feed in, what did
+it assert, and what value did the code under test actually produce to satisfy
+that assertion. That is what this file records — one paragraph per test, in the
+exact order pytest ran them. Where a concrete value is stated below, it is the
+value the assertion pins down, derived from reading the test and the code it
+exercises.
+
+The "[ 97%]" is just pytest's progress counter (test 156 of 158), not a score.
+
+
+=====================================================================
+FILE 1 — tests/api/test_controller.py  (24 tests, all passed)
+Exercises ChatController and RAGController in src/api/controller.py with the
+business layer mocked out, so nothing hits Redis, OpenAI, Chroma, or the disk.
+=====================================================================
+
+--- class TestChatControllerSendMessage (7 tests) ---
+
+[1] test_send_message_success — PASSED
+Builds a ChatMessageRequest(message="Hello", session_id="session_123") and
+patches src.api.controller.process_chat_message with an AsyncMock returning
+{"reply": "Hello! How can I help?", "model_used": "gpt-4o", "tokens_used": 42}.
+The two Prometheus counters are patched so nothing is really incremented. The
+controller returned a ChatMessageResponse whose reply was "Hello! How can I
+help?", session_id "session_123", model_used "gpt-4o", and tokens_used 42 —
+confirming the dict-to-DTO mapping copies session_id off the request rather
+than the business result.
+
+[2] test_send_message_empty_message — PASSED
+Sends message="" and asserts the controller raises HTTPException with status
+400 and a detail containing "cannot be empty". The captured exception was
+HTTPException(400, "Message cannot be empty"). This test was FAILING before
+this session's fix: send_message lacked an `except HTTPException: raise` clause,
+so its own 400 was swallowed by the generic handler and re-raised as
+HTTPException(500, "Internal server error: 400: Message cannot be empty"). The
+assertion now holds because the re-raise was added at src/api/controller.py:88.
+
+[3] test_send_message_whitespace_only — PASSED
+Same as above but with message="   \n  ", proving the guard uses .strip() and
+not merely a falsy check. Raised HTTPException with status_code 400. Also a
+casualty of the same 500-wrapping bug before the fix.
+
+[4] test_send_message_records_metrics — PASSED
+Business logic returns model_used "gpt-4o" and tokens_used 100. Asserts that
+CHAT_MODEL_REQUESTS_TOTAL.labels and CHAT_TOKENS_TOTAL.labels were each called
+exactly once with model="gpt-4o". Both assert_called_once_with checks passed,
+so the model name is used as the metric label and neither counter is touched
+twice per request.
+
+[5] test_send_message_handles_business_logic_error — PASSED
+process_chat_message raises Exception("Database connection error"). Asserts the
+controller converts it to HTTPException 500. It did — the generic handler wraps
+unexpected failures as "Internal server error: Database connection error"
+rather than leaking the raw traceback to the client.
+
+[6] test_send_message_handles_value_error — PASSED
+process_chat_message raises ValueError("Invalid input format"). Asserts status
+400, not 500 — a ValueError from the business layer is treated as a caller
+mistake. Confirms the `except ValueError` branch still sits ahead of the
+generic handler after the HTTPException re-raise was inserted above it.
+
+[7] test_send_message_without_tokens — PASSED
+Business result omits tokens_used entirely. Asserts
+CHAT_TOKENS_TOTAL.labels(...).inc was never called. It wasn't — the
+`if tokens_used:` guard held, so a response with no token count does not
+increment the token counter with None or 0.
+
+--- class TestChatControllerGetHistory (6 tests) ---
+
+[8] test_get_history_success — PASSED
+get_chat_history is mocked to return two messages, total 2, session_id
+"session_123". The controller returned a ChatHistoryResponse with len(messages)
+== 2, total == 2, session_id == "session_123" — a straight pass-through of the
+three keys into the DTO.
+
+[9] test_get_history_invalid_user_id — PASSED
+user_id=0 raises HTTPException 400 ("Invalid user_id"). The guard is `<= 0`, so
+zero is rejected, and the business layer was never reached.
+
+[10] test_get_history_negative_user_id — PASSED
+user_id=-1 likewise raises HTTPException 400.
+
+[11] test_get_history_empty_messages — PASSED
+Business layer returns messages=[] and total=0. Asserts the controller returns
+response.messages == [] and response.total == 0 rather than erroring or
+substituting a default. It did — an empty history is a valid 200 response.
+
+[12] test_get_history_reraises_http_exception — PASSED
+The mocked business layer raises HTTPException(403, "Forbidden"). Asserts the
+propagated exception still has status_code 403. It did — the
+`except HTTPException: raise` clause preserved it instead of masking it as a
+500. This is precisely the clause send_message was missing (see test [2]).
+
+[13] test_get_history_handles_other_errors — PASSED
+Business layer raises Exception("Database unavailable"); asserts conversion to
+HTTPException 500.
+
+--- class TestRAGControllerQuery (4 tests) ---
+
+[14] test_query_success — PASSED
+query_rag is mocked to return {"answer": "AI is...", "sources": [{"text":
+"AI is...", "metadata": {"source_id": "document1.pdf"}, "score": 0.87}]}. The
+controller returned answer "AI is..." and sources equal to that same list of
+dicts. This test was FAILING before this session: it previously mocked sources
+as ["document1.pdf"], a list of strings, but RAGQueryResponse.sources is
+declared List[dict], so Pydantic raised a dict_type validation error that the
+controller re-reported as HTTPException(500, "RAG query failed: 1 validation
+error..."). The mock now matches the real chunk shape query_rag returns.
+
+[15] test_query_empty_question — PASSED
+question="" raises HTTPException 400 with detail containing "cannot be empty".
+Note this guard sits OUTSIDE the try block in RAGController.query, which is why
+it never suffered the 500-wrapping bug that hit send_message.
+
+[16] test_query_whitespace_only — PASSED
+question="   \n  " also raises HTTPException 400, confirming the .strip() check.
+
+[17] test_query_handles_errors — PASSED
+query_rag raises Exception("Vector store unavailable"). Asserts status 500 and
+that the detail string contains "RAG query failed". Both held.
+
+--- class TestRAGControllerUpload (7 tests) ---
+
+[18] test_upload_pdf_success — PASSED
+A MagicMock file named "test.pdf" is uploaded with ingest_pdfs mocked to return
+docs_indexed 1, chunks_indexed 25. Path.mkdir, Path.glob and shutil.copyfileobj
+are patched so no directory is created and no bytes are written. The returned
+RAGUploadResponse had filename "test.pdf", docs_indexed 1, chunks_indexed 25.
+
+[19] test_upload_non_pdf_file — PASSED
+filename "test.txt" raises HTTPException 400 whose detail contains "PDF". The
+extension check runs before any filesystem work.
+
+[20] test_upload_no_filename — PASSED
+filename None raises HTTPException 400 — the `not file.filename` guard fires
+before .lower() would raise AttributeError on None.
+
+[21] test_upload_case_insensitive_extension — PASSED
+filename "test.PDF" is accepted and echoed back verbatim as response.filename
+== "test.PDF", proving the check lowercases for comparison but preserves the
+original name.
+
+[22] test_upload_records_metrics — PASSED
+ingest_pdfs returns docs_indexed 2, chunks_indexed 50. Asserts
+RAG_DOCUMENTS_INDEXED_TOTAL.inc was called exactly once with 2 and
+RAG_CHUNKS_INDEXED_TOTAL.inc exactly once with 50 — the counters are advanced
+by the indexed volume, not by 1 per upload.
+
+[23] test_upload_removes_old_pdfs — PASSED
+Path.glob is patched to return one fake pre-existing PDF. Asserts
+mock_old_pdf.unlink was called exactly once, confirming the uploads directory is
+purged before the new file lands so previous PDFs are not silently re-indexed
+alongside it.
+
+[24] test_upload_handles_errors — PASSED
+ingest_pdfs raises Exception("Indexing failed"). Asserts HTTPException 500 with
+a detail containing "PDF upload failed".
+
+
+=====================================================================
+FILE 2 — tests/api/test_ratelimiter.py  (23 tests, all passed)
+Exercises the TokenBucket in src/api/ratelimiter.py. consume(n) refills first
+based on elapsed wall-clock time, then returns True and subtracts n if
+self.tokens >= n, else returns False. Several tests use real time.sleep(), so
+this file is the slowest wall-clock portion of the suite.
+=====================================================================
+
+--- class TestTokenBucketInitialization (3 tests) ---
+
+[25] test_initializes_with_full_capacity — PASSED
+TokenBucket(capacity=10, refill_rate=2.0) starts with tokens == 10, capacity ==
+10, refill_rate == 2.0. The bucket begins full, so a fresh client gets a full
+burst allowance rather than having to wait for the first refill.
+
+[26] test_initializes_with_zero_capacity — PASSED
+capacity=0 yields tokens == 0. Degenerate but not an error — such a bucket
+rejects every consume(n>0) forever.
+
+[27] test_initializes_with_fractional_refill_rate — PASSED
+refill_rate=0.5 is stored as 0.5, confirming the rate is a float and not
+coerced to an int (0.5 tokens/sec = one token every two seconds).
+
+--- class TestTokenBucketConsumption (5 tests) ---
+
+[28] test_consumes_single_token — PASSED
+consume(1) on a full 10-token bucket returned True and left tokens == 9.
+
+[29] test_consumes_multiple_tokens — PASSED
+consume(5) returned True and left tokens == 5 — a request may cost more than
+one token.
+
+[30] test_consumes_all_tokens — PASSED
+consume(10) on a 10-capacity bucket returned True and left tokens == 0. The
+comparison is `>=`, so draining the bucket exactly is allowed.
+
+[31] test_rejects_when_insufficient_tokens — PASSED
+After consume(5), a consume(6) against the remaining ~5 returned False. The
+assertion on the balance is deliberately `>= 5` rather than `== 5`, because
+real time elapses between the two calls and refills a sliver back. Crucially, a
+rejected request does not deduct anything.
+
+[32] test_rejects_empty_bucket — PASSED
+capacity=1, refill_rate=0: the first consume(1) succeeded, the second returned
+False. With no refill the bucket stays empty permanently.
+
+--- class TestTokenBucketRefill (4 tests) ---
+
+[33] test_refills_over_time — PASSED
+Consumed 5 of 10, slept 100ms at 2.0 tokens/sec, then called consume(0) purely
+to trigger _refill(). tokens was strictly greater than 5 (~5.2). Confirms
+refill is lazy — driven by a consume() call, not a background timer.
+
+[34] test_refill_respects_capacity — PASSED
+capacity=10, refill_rate=100.0: consumed 5, slept a full second (which would
+add 100 tokens uncapped), then tokens == exactly 10. The refill is clamped at
+capacity, so idle time cannot bank an unlimited burst.
+
+[35] test_zero_refill_rate_stays_empty — PASSED
+refill_rate=0: consumed 5, slept 200ms, tokens still exactly 5. Elapsed time
+multiplied by a zero rate adds nothing.
+
+[36] test_fractional_token_accumulation — PASSED
+capacity=100, refill_rate=0.5: consumed 50, slept 100ms (worth 0.05 tokens),
+then asserted 50 < tokens < 51. Tokens are held as floats and accumulate
+fractionally; they are not rounded down to whole tokens between calls.
+
+--- class TestTokenBucketEdgeCases (4 tests) ---
+
+[37] test_consume_zero_tokens — PASSED
+consume(0) returned True and left tokens at 10. This is the idiom the refill
+tests rely on: a no-op call that advances the clock without spending anything.
+
+[38] test_negative_consumption_not_validated — PASSED
+This test documents a QUIRK rather than a desired behaviour, and its own
+docstring says so. After consuming 5, consume(-2) returned True and the balance
+rose to at least 7, because the implementation does `self.tokens -= tokens` with
+no input validation — a negative argument mints tokens. Nothing in the codebase
+passes a negative value today, so it is latent, but any future caller that
+computes a token cost by subtraction could silently refill the bucket. Worth
+guarding with `if tokens < 0: raise ValueError` if you ever expose consume()
+beyond the middleware.
+
+[39] test_large_capacity — PASSED
+capacity=1_000_000: consume(500_000) returned True leaving exactly 500_000. No
+overflow or precision loss at that magnitude.
+
+[40] test_very_small_refill_rate — PASSED
+refill_rate=0.001 (one token per 1000 seconds): after consuming 5 and sleeping
+100ms, tokens was still strictly greater than 5 — an increment of about 1e-4
+survived in the float rather than being lost.
+
+--- class TestTokenBucketRealWorldScenarios (4 tests) ---
+
+[41] test_steady_request_stream_under_limit — PASSED
+capacity 10, 5 tokens/sec, 20 requests spaced 50ms apart (a 20 req/sec arrival
+rate against a 5/sec budget). Asserts more than 10 of the 20 succeeded. They
+did — the initial full bucket absorbs the early burst and refill covers part of
+the rest. Note this is a loose statistical assertion, not an exact count,
+precisely because it depends on real sleep timing.
+
+[42] test_burst_then_wait_pattern — PASSED
+capacity 5, 1 token/sec. Five consecutive consume(1) calls all returned True,
+the sixth returned False, then after sleeping 1.1s one more consume(1) returned
+True and the next returned False. This is the canonical burst-then-drip shape a
+token bucket exists to produce.
+
+[43] test_request_at_exact_rate — PASSED
+capacity 2, 1 token/sec: consume(1), sleep exactly 1.0s, consume(1) returned
+True. A client pacing itself at exactly the refill rate is never throttled.
+
+[44] test_api_rate_limit_scenario — PASSED
+The realistic case: capacity 10, 1 token/sec (60 req/min). Ten immediate
+requests all succeeded, the 11th was rejected, and after a one-second sleep the
+next succeeded. This is the behaviour the API middleware actually depends on.
+
+--- class TestTokenBucketConcurrency (3 tests) ---
+
+[45] test_rapid_consume_calls_same_tick — PASSED
+Four back-to-back calls — consume(3), consume(3), consume(3), consume(1) —
+against a 10-token bucket all returned True, leaving tokens < 1, and the next
+consume(1) returned False. Because the calls happen within the same instant,
+essentially no refill intervenes and the arithmetic is exactly 10-3-3-3-1=0.
+Note this is a single-threaded simulation: it shows the accounting is correct
+under rapid sequential access, but it does NOT prove thread safety, since
+TokenBucket takes no lock. Under real concurrent workers two threads could
+both pass the `self.tokens >= tokens` check before either subtracts.
+
+[46] test_refill_timestamp_updates_correctly — PASSED
+Captured last_refill_timestamp, slept 100ms, called consume(0), and asserted the
+new timestamp is strictly greater. The clock marker advances on every refill —
+without this, elapsed time would be counted repeatedly and the bucket would
+over-refill.
+
+[47] test_multiple_refills_accumulate — PASSED
+capacity 10, 1 token/sec: consumed 5, slept 0.5s and sampled (~5.5), slept
+another 0.6s and sampled again (~6.1+). Asserts the second sample is strictly
+greater than the first, confirming successive partial refills compound instead
+of each one resetting from the same baseline.
+
+
+=====================================================================
+FILE 3 — tests/business/core/test_cost.py  (26 tests, all passed)
+Exercises the pricing tables and cost arithmetic in src/business/core/cost.py.
+Pure functions, no mocks, no I/O — these are the fastest tests in the suite.
+Reference rates: gpt-4o $5/1M in and $15/1M out; gpt-3.5-turbo $0.5/1M in and
+$1.5/1M out; text-embedding-3-small $0.02/1M; text-embedding-3-large $0.13/1M.
+=====================================================================
+
+--- class TestCalculateChatCost (9 tests) ---
+
+[48] test_calculate_cost_gpt_4o_openai — PASSED
+1M input + 1M output tokens on gpt-4o returned exactly 20.0 USD ($5 + $15).
+The anchor case for the whole pricing table.
+
+[49] test_calculate_cost_gpt_3_5_turbo — PASSED
+The same 1M/1M split on gpt-3.5-turbo returned exactly 2.0 USD ($0.5 + $1.5),
+confirming per-model rates are looked up rather than hardcoded.
+
+[50] test_calculate_cost_partial_tokens — PASSED
+100k input + 50k output on gpt-4o returned 1.25 USD (0.1 x 5 = 0.50 plus
+0.05 x 15 = 0.75). Proves the function scales linearly on sub-million counts
+instead of rounding up to whole millions.
+
+[51] test_calculate_cost_zero_output_tokens — PASSED
+1M input, 0 output on gpt-4o returned 5.0 — only the input leg is charged.
+
+[52] test_calculate_cost_zero_input_tokens — PASSED
+0 input, 1M output on gpt-4o returned 15.0 — only the output leg is charged.
+Together with [51] this proves input and output are priced independently and at
+different rates, which is the whole reason the two are tracked separately.
+
+[53] test_calculate_cost_unknown_model — PASSED
+model_name="unknown-model" returned 0.0 rather than raising. This is the
+deliberate fail-soft policy documented in CLAUDE.md: adopting a new model must
+never crash a live chat request just because its price is not in the table yet.
+The tradeoff is that cost silently under-reports as $0 until you add the entry,
+so the Grafana cost panels can look wrong rather than broken.
+
+[54] test_calculate_cost_azure_openai — PASSED
+gpt-4o at 1M/1M with provider="azure_openai" also returned 20.0 — Azure is
+priced from its own table that currently matches OpenAI for this model, so
+switching LLM_PROVIDER does not change reported spend.
+
+[55] test_cost_precision — PASSED
+1 input + 1 output token on gpt-3.5-turbo returned exactly 0.000002, showing
+results are rounded to 6 decimal places and a single-token call is still
+representable rather than collapsing to zero.
+
+[56] test_calculate_cost_large_numbers — PASSED
+10M input + 5M output on gpt-4o returned 125.0 (50 + 75). No float drift at
+that scale.
+
+--- class TestCalculateEmbeddingCost (7 tests) ---
+
+[57] test_calculate_embedding_cost_small — PASSED
+1M tokens of text-embedding-3-small returned 0.02 USD.
+
+[58] test_calculate_embedding_cost_large — PASSED
+1M tokens of text-embedding-3-large returned 0.13 USD — 6.5x the small model,
+confirming the two are priced from distinct entries.
+
+[59] test_calculate_embedding_cost_partial — PASSED
+100k tokens of the small model returned 0.002 (0.1 x 0.02). Linear scaling.
+
+[60] test_calculate_embedding_cost_zero — PASSED
+0 tokens returned 0.0 — no minimum charge and no division-by-zero.
+
+[61] test_calculate_embedding_cost_unknown_model — PASSED
+An unrecognised embedding model returned 0.0, mirroring the fail-soft policy of
+test [53] on the chat side.
+
+[62] test_calculate_embedding_cost_azure — PASSED
+provider="azure_openai" on text-embedding-3-small returned 0.02, same as OpenAI.
+
+[63] test_embedding_cost_precision — PASSED
+A single token of text-embedding-3-small computes to 0.00000002 USD, which
+rounds to 0.0 at 6 decimal places — and the test asserts exactly that. This is
+an honest documentation of a real limitation: individual embedding calls are
+too cheap to register, so embedding_cost_total only becomes meaningful in
+aggregate over large batches. Per-call embedding cost will read as zero.
+
+--- class TestGetModelPricing (4 tests) ---
+
+[64] test_get_pricing_openai — PASSED
+get_model_pricing("gpt-4o", provider="openai") returned a non-None ModelPricing
+with model_name "gpt-4o", input_tokens_per_1m 5.0, output_tokens_per_1m 15.0 —
+the table lookup exposed directly, independent of the arithmetic above.
+
+[65] test_get_pricing_azure — PASSED
+The same lookup with provider="azure_openai" returned a non-None entry named
+"gpt-4o", so the Azure table is populated and not an empty stub.
+
+[66] test_get_pricing_unknown_model — PASSED
+An unknown model returned None. This is the sentinel the calculate_* functions
+translate into 0.0 — the lookup itself does not lie about the price, it reports
+absence, and only the caller degrades it to zero.
+
+[67] test_get_pricing_default_provider — PASSED
+Called with no provider argument, the lookup defaulted to OpenAI and returned
+input_tokens_per_1m 5.0 for gpt-4o.
+
+--- class TestGetEmbeddingPricing (4 tests) ---
+
+[68] test_get_embedding_pricing_small — PASSED
+Returned an EmbeddingPricing with model_name "text-embedding-3-small" and
+tokens_per_1m 0.02. Note embeddings carry a single rate, not an input/output
+pair — there is no output leg to charge for.
+
+[69] test_get_embedding_pricing_large — PASSED
+tokens_per_1m 0.13 for text-embedding-3-large.
+
+[70] test_get_embedding_pricing_unknown — PASSED
+An unknown embedding model returned None.
+
+[71] test_get_embedding_pricing_azure — PASSED
+provider="azure_openai" returned a non-None entry for text-embedding-3-small.
+
+--- class TestModelPricingDataclass (1 test) ---
+
+[72] test_model_pricing_creation — PASSED
+Constructs ModelPricing("test-model", 1.0, 2.0) directly and reads back all
+three fields. A shape test for the dataclass contract — it confirms the
+positional field order (name, input rate, output rate) that every table entry
+depends on.
+
+--- class TestEmbeddingPricingDataclass (1 test) ---
+
+[73] test_embedding_pricing_creation — PASSED
+Constructs EmbeddingPricing("test-embedding", 0.5) and reads back model_name
+and tokens_per_1m.
+
+=====================================================================
+FILE 4 — tests/business/core/test_embedding.py  (25 tests, all passed)
+Exercises src/business/core/embedding.py. Every test injects a Mock OpenAI
+client or patches the OpenAI constructor, so no embedding API call is made and
+no OPENAI_API_KEY is required beyond the fake values patched into os.environ.
+=====================================================================
+
+--- class TestEmbedderInterface (2 tests) ---
+
+[74] test_cannot_instantiate_abstract_base — PASSED
+Embedder() raised TypeError. The ABC has abstract methods, so it cannot be
+instantiated directly.
+
+[75] test_subclass_must_implement_methods — PASSED
+A subclass that implements nothing also raised TypeError on instantiation,
+confirming the abstract methods are genuinely marked @abstractmethod and not
+just documented as required.
+
+--- class TestOpenAIEmbedderInitialization (4 tests) ---
+
+[76] test_initializes_with_api_key — PASSED
+OpenAIEmbedder(api_key="test-key") defaulted model to "text-embedding-3-small",
+the cheaper of the two models.
+
+[77] test_initializes_with_custom_model — PASSED
+Passing model="text-embedding-3-large" stored that name instead.
+
+[78] test_accepts_preconfigured_client — PASSED
+OpenAIEmbedder(client=mock_client) stored the exact object passed
+(assert embedder.client is mock_client — identity, not equality). This is the
+seam that lets an Azure-built client be injected without the embedder knowing
+anything about Azure.
+
+[79] test_creates_client_from_api_key — PASSED
+With no client supplied, OpenAI was constructed exactly once with
+api_key="test-key" — the embedder builds its own client only when it isn't given
+one.
+
+--- class TestOpenAIEmbedderEmbedQuery (3 tests) ---
+
+[80] test_embed_single_query — PASSED
+A mocked response carrying one embedding [0.1, 0.2, 0.3] produced exactly that
+list back, and client.embeddings.create was called once. The method unwraps
+response.data[0].embedding rather than returning the envelope.
+
+[81] test_embed_query_is_list — PASSED
+With a realistic 1536-dimension vector, the result was a list of length 1536
+whose every element is a float. 1536 is the native width of
+text-embedding-3-small, so this pins the shape the Chroma index expects.
+
+[82] test_embed_query_uses_correct_model — PASSED
+An embedder configured with "text-embedding-3-large" passed
+model="text-embedding-3-large" in the create() kwargs — the configured model is
+actually forwarded, not ignored in favour of a default.
+
+--- class TestOpenAIEmbedderEmbedDocuments (3 tests) ---
+
+[83] test_embed_empty_list — PASSED
+embed_documents([]) returned [] AND client.embeddings.create was asserted never
+to have been called. The short-circuit matters for cost: an empty batch must not
+bill an API round-trip.
+
+[84] test_embed_multiple_documents — PASSED
+Three texts produced three vectors in input order — [0.1,0.2], [0.3,0.4],
+[0.5,0.6]. Order preservation is essential because the caller zips these back
+against the chunk metadata positionally.
+
+[85] test_embed_documents_batches_correctly — PASSED
+Five texts resulted in a single create() call whose input kwarg equals the whole
+list. All five went out in one request rather than five sequential ones.
+
+--- class TestOpenAIEmbedderBackwardCompatibility (1 test) ---
+
+[86] test_embed_method_calls_embed_query — PASSED
+The legacy embed() alias returned [0.1, 0.2], the same as embed_query() would.
+Older call sites keep working.
+
+--- class TestOpenAIEmbedderRetryLogic (3 tests) ---
+
+[87] test_retries_on_internal_server_error — PASSED
+The mocked client raises a real openai.InternalServerError on the first call and
+succeeds on the second, with time.sleep patched out so the test is instant. The
+result was [0.1] and create() was called exactly 2 times — a transient 500 is
+retried rather than surfaced.
+
+[88] test_gives_up_after_max_retries — PASSED
+With the client raising InternalServerError every time, the exception was
+finally re-raised to the caller and create() had been called exactly 5 times.
+Retrying is bounded at 5 attempts, so a persistently failing backend fails loudly
+instead of hanging forever.
+
+[89] test_retry_delay_increases_exponentially — PASSED
+time.sleep is patched with a recorder. After two failures then a success, the
+recorded sleep arguments were exactly [1, 2] — a 2^attempt backoff (2^0 then
+2^1). Note there is no jitter, so many workers retrying together would stay in
+lockstep.
+
+--- class TestCreateEmbedderFactory (9 tests) ---
+
+[90] test_default_provider_is_openai — PASSED
+With OPENAI_API_KEY patched in, create_embedder() with no arguments returned an
+OpenAIEmbedder — the on-prem-safe default documented in CLAUDE.md.
+
+[91] test_explicit_openai_provider — PASSED
+provider="openai" returned an OpenAIEmbedder.
+
+[92] test_custom_model_name — PASSED
+The model argument reached the instance: embedder.model ==
+"text-embedding-3-large".
+
+[93] test_openai_requires_api_key — PASSED
+With OPENAI_API_KEY set to the empty string, the factory raised RuntimeError
+matching "OPENAI_API_KEY must be set". It fails at construction with a readable
+message rather than at the first embed call with an opaque 401.
+
+[94] test_azure_openai_provider — PASSED
+With AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY and
+AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME set, the factory returned an
+OpenAIEmbedder whose model is "test-embedding". Note the key insight: Azure
+reuses the same OpenAIEmbedder class with a different injected client, and the
+Azure *deployment name* is what lands in the model field.
+
+[95] test_azure_requires_embedding_deployment_name — PASSED
+With the deployment name blanked, the factory raised RuntimeError matching
+"AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME". Azure has no usable default here, so
+this must fail loudly.
+
+[96] test_unknown_provider_raises_error — PASSED
+provider="unknown_provider" raised ValueError matching "Unknown
+EMBEDDING_PROVIDER" — an unrecognised provider is never silently downgraded to
+the default.
+
+[97] test_case_insensitive_provider — PASSED
+Both "OPENAI" and "OpenAI" produced OpenAIEmbedder instances, so the env var is
+normalised with .lower() and casing in .env cannot break startup.
+
+[98] test_env_var_provider_selection — PASSED
+With EMBEDDING_PROVIDER=openai in the environment and no explicit argument, the
+factory returned an OpenAIEmbedder — env-var selection works, not just the
+parameter.
+
+
+=====================================================================
+FILE 5 — tests/business/core/test_live_data.py  (29 tests, all passed)
+Exercises src/business/core/live_data.py — the web/news search backends behind
+the agent's web_search tool. This file changed substantially this session: the
+DuckDuckGo class was rewritten and one factory test was isolated from .env.
+=====================================================================
+
+--- class TestLiveDataProviderInterface (2 tests) ---
+
+[99] test_cannot_instantiate_abstract_base — PASSED
+LiveDataProvider() raised TypeError.
+
+[100] test_subclass_must_implement_search — PASSED
+A subclass not implementing search() also raised TypeError on instantiation.
+
+--- class TestMockLiveDataProvider (4 tests) ---
+
+[101] test_search_returns_results — PASSED
+The mock provider returned a non-empty list in which every entry has title,
+summary and source keys. This is the default provider (LIVE_DATA_PROVIDER=mock),
+so this test guards the out-of-the-box behaviour of a fresh checkout.
+
+[102] test_search_respects_limit — PASSED
+search("test", limit=1) returned at most 1 result — the mock slices its two
+canned results rather than ignoring the limit.
+
+[103] test_search_returns_dict_structure — PASSED
+Every result is a dict carrying title, summary and source. This is the contract
+the agent's formatter in agentic_chatbot.py relies on, so all three providers
+must agree on it.
+
+[104] test_search_includes_query_in_results — PASSED
+Searching "special test query" produced results whose combined title+summary
+text contains that phrase, confirming the mock echoes the query so demo output
+looks responsive rather than static.
+
+--- class TestDuckDuckGoSearchProvider (5 tests) ---
+NOTE: this entire class was REWRITTEN this session. It previously tested a
+removed `requests`-based DuckDuckGo Instant Answer implementation. Only one of
+its tests actually failed; the other three passed VACUOUSLY — patching
+requests.get did nothing to the DDGS-based code, so the real call raised, the
+broad `except Exception` returned an error entry, and the loose assertions
+(len(results) > 0) were satisfied by that error entry. They were also hitting
+the live network. All five now patch DDGS and assert real behaviour.
+
+[105] test_initialization_checks_ddgs — PASSED
+With live_data.DDGS patched to None, constructing DuckDuckGoSearchProvider()
+raised RuntimeError matching "duckduckgo-search". Previously this test patched
+`requests` to None and expected a match on "requests" — but the constructor has
+never checked requests, so it raised nothing and the test failed. It now names
+the dependency the code actually requires.
+
+[106] test_search_makes_api_call — PASSED
+DDGS is patched to return a mock whose .text() yields two raw DuckDuckGo hits
+using DDGS's own field names (title/body/href). Asserts .text() was called
+exactly once with ("test query", max_results=5), and that the mapped output has
+title "Result 1", summary "Body 1", url "https://example.com/1", with every
+entry tagged source "DuckDuckGo". This pins the field translation
+body->summary and href->url that the rest of the pipeline depends on.
+
+[107] test_search_returns_empty_when_no_results — PASSED
+When DDGS returns [], search() returned exactly []. A genuine no-hits result is
+reported as empty, which the agent renders as "No search results found" —
+distinct from an error. This test is new; the old class had no empty-result case.
+
+[108] test_search_handles_api_error — PASSED
+When .text() raises Exception("API error"), search() returned a non-empty list
+whose first summary contains "error"/"failed" rather than propagating. A search
+backend outage degrades the answer instead of failing the whole chat turn.
+
+[109] test_search_respects_limit — PASSED
+With ten hits available and limit=3, .text() was called with max_results=3 and
+exactly 3 results came back. The limit is pushed down into the DDGS call, not
+just applied as a slice afterwards — so it actually reduces work upstream.
+
+--- class TestNewsAPIProvider (9 tests) ---
+
+[110] test_initialization_requires_api_key — PASSED
+With NEWS_API_KEY set to empty, NewsAPIProvider() raised RuntimeError matching
+"NEWS_API_KEY".
+
+[111] test_initialization_accepts_api_key_parameter — PASSED
+NewsAPIProvider(api_key="test-key") stored api_key == "test-key" without
+consulting the environment.
+
+[112] test_initialization_from_env_var — PASSED
+With NEWS_API_KEY="env-key" and no argument, api_key == "env-key".
+
+[113] test_initialization_prefers_parameter_over_env — PASSED
+With env "env-key" and parameter "param-key", the instance kept "param-key" —
+explicit configuration beats ambient environment.
+
+[114] test_initialization_checks_requests — PASSED
+With a valid key present but live_data.requests patched to None, the constructor
+raised RuntimeError matching "requests". Unlike the DuckDuckGo class, NewsAPI
+genuinely does use requests, so this patch target is correct here — which is
+what made the old DuckDuckGo version of this test [105] look plausible.
+
+[115] test_search_makes_api_call — PASSED
+requests.get is patched to return a response whose .json() is a normal
+{"status": "ok", "articles": [...]} payload with one article. Exactly 1 result
+came back with title "Test Article".
+
+[116] test_search_handles_api_error — PASSED
+requests.get raising Exception("API error") produced a non-empty list whose
+first summary contains "error"/"failed" — a network failure is reported, not
+raised.
+
+[117] test_search_handles_api_error_response — PASSED
+The harder case: the HTTP call SUCCEEDS but the body is
+{"status": "error", "message": "API quota exceeded"}. Asserts a non-empty list
+whose first summary contains "error". This test was FAILING before this session
+because the code returned [] on a non-ok status; the agent maps [] to "No
+search results found", so a quota or auth failure was being reported to the user
+as the topic simply having no coverage. src/business/core/live_data.py:146 now
+returns an error entry carrying the API's own message, matching what the
+exception branch directly below it already did.
+
+[118] test_search_respects_limit — PASSED
+Ten articles in the payload with limit=3 produced exactly 3 results. Note the
+limit is applied both as the pageSize request parameter and as a slice on the
+response, so an over-generous API answer is still trimmed.
+
+--- class TestCreateLiveDataProviderFactory (9 tests) ---
+
+[119] test_default_provider_is_mock — PASSED
+With LIVE_DATA_PROVIDER removed from the environment, create_live_data_provider()
+returned a MockLiveDataProvider. This test was FAILING before this session for a
+reason that had nothing to do with the code under test: your .env sets
+LIVE_DATA_PROVIDER=newsapi, load_dotenv() runs at import, and the test asserted
+the *default* while the real environment overrode it — so it got a
+NewsAPIProvider. The test now pops the variable first. Worth noting as a general
+hazard: any test asserting a default must neutralise .env explicitly.
+
+[120] test_explicit_mock_provider — PASSED
+provider="mock" returned MockLiveDataProvider.
+
+[121] test_duckduckgo_provider — PASSED
+provider="duckduckgo" returned a DuckDuckGoSearchProvider. Construction only
+checks that the DDGS symbol imported, so no network call occurs.
+
+[122] test_newsapi_provider — PASSED
+With NEWS_API_KEY patched in, provider="newsapi" returned a NewsAPIProvider.
+
+[123] test_env_var_provider_selection — PASSED
+With LIVE_DATA_PROVIDER=mock in the environment and no argument, the factory
+returned MockLiveDataProvider.
+
+[124] test_parameter_overrides_env_var — PASSED
+With LIVE_DATA_PROVIDER=duckduckgo in the environment but provider="mock"
+passed explicitly, the result was MockLiveDataProvider — the argument wins.
+
+[125] test_case_insensitive_provider_name — PASSED
+Both "MOCK" and "Mock" produced MockLiveDataProvider.
+
+[126] test_unknown_provider_raises_error — PASSED
+provider="unknown_provider" raised ValueError matching "Unknown" — no silent
+fallback to mock, which would hide a typo in .env behind plausible-looking
+demo data.
+
+[127] test_passes_kwargs_to_newsapi — PASSED
+With NewsAPIProvider itself patched, calling the factory with
+api_key="custom-key" resulted in exactly one call to NewsAPIProvider with
+api_key="custom-key" — extra kwargs reach the provider constructor rather than
+being dropped.
+
+=====================================================================
+FILE 6 — tests/business/core/test_model.py  (26 tests, all passed)
+Exercises src/business/core/model.py: the BaseLLM interface, the OpenAI-backed
+implementation, the local Hugging Face implementation, the create_llm factory,
+and the shared Azure client builder. Transformers loading is patched, so no
+model weights are downloaded.
+=====================================================================
+
+--- class TestBaseLLMInterface (2 tests) ---
+
+[128] test_cannot_instantiate_abstract_base — PASSED
+BaseLLM() raised TypeError.
+
+[129] test_subclass_must_implement_generate — PASSED
+A subclass without generate() raised TypeError on instantiation.
+
+--- class TestOpenAIModelImplementation (6 tests) ---
+
+[130] test_initialize_with_defaults — PASSED
+OpenAIModel with only client/model_name/system_prompt defaulted temperature to
+0.7 and max_tokens to 512.
+
+[131] test_initialize_with_custom_params — PASSED
+temperature=0.3 and max_tokens=1024 were stored as given.
+
+[132] test_generate_calls_client_correctly — PASSED
+generate("What is AI?", ["Context 1", "Context 2"]) resulted in exactly one
+client.chat.completions.create call whose kwargs were model "gpt-4o",
+temperature 0.5, max_tokens 200 — the instance configuration is forwarded to the
+API call rather than being decorative.
+
+[133] test_generate_returns_stripped_response — PASSED
+A raw completion of "  Generated response  \n" came back as exactly
+"Generated response". Leading/trailing whitespace is stripped before the text
+reaches the caller.
+
+[134] test_generate_with_empty_context — PASSED
+generate("Question?", []) returned "Response" — an empty context list is valid
+and does not raise, which matters because the RAG fail-closed path can legally
+supply zero chunks.
+
+[135] test_generate_with_multiple_context_items — PASSED
+Three context strings produced exactly one create() call. Note this test only
+asserts the call happened; it does not inspect how the three items were folded
+into the prompt, so it is weaker than its name suggests.
+
+--- class TestCreateLLMFactory (10 tests) ---
+
+[136] test_default_provider_is_openai — PASSED
+create_llm(system_prompt="Test", provider="openai") returned an OpenAIModel.
+
+[137] test_explicit_openai_provider — PASSED
+provider="openai" with OPENAI_API_KEY patched returned an OpenAIModel.
+
+[138] test_env_var_provider_openai — PASSED
+LLM_PROVIDER=openai in the environment with no explicit argument returned an
+OpenAIModel.
+
+[139] test_custom_model_name — PASSED
+model_name="gpt-4-turbo" reached the instance as model.model_name.
+
+[140] test_openai_requires_api_key — PASSED
+With OPENAI_API_KEY empty, create_llm raised RuntimeError matching
+"OPENAI_API_KEY must be set".
+
+[141] test_huggingface_provider — PASSED
+With AutoTokenizer.from_pretrained and AutoModelForCausalLM.from_pretrained both
+patched, provider="huggingface" returned a LocalHFModel. The patches are what
+keep this fast — otherwise it would pull multi-gigabyte weights.
+
+[142] test_azure_openai_provider — PASSED
+With the three AZURE_OPENAI_* variables set, provider="azure_openai" returned an
+OpenAIModel whose model_name is "test-deployment". As with embeddings, Azure
+reuses the OpenAI class and the deployment name occupies the model field — the
+detail most likely to confuse when reading Grafana's per-model cost labels,
+since the label will show your deployment name, not "gpt-4o".
+
+[143] test_azure_openai_requires_deployment_name — PASSED
+With AZURE_OPENAI_CHAT_DEPLOYMENT_NAME blanked, create_llm raised RuntimeError
+matching that variable name.
+
+[144] test_unknown_provider_raises_error — PASSED
+provider="unknown_provider" raised ValueError matching "Unknown LLM_PROVIDER".
+
+[145] test_case_insensitive_provider — PASSED
+Both "OPENAI" and "OpenAI" produced OpenAIModel instances.
+
+--- class TestBuildAzureOpenAIClient (5 tests) ---
+
+[146] test_builds_azure_client_from_env — PASSED
+With endpoint, key and version in the environment and the AzureOpenAI class
+patched, the builder called it exactly once with azure_endpoint
+"https://test.openai.azure.com/", api_key "test-key", api_version "2024-10-21".
+
+[147] test_prefers_passed_api_key — PASSED
+With "env-key" in the environment, build_azure_openai_client(api_key=
+"passed-key") used "passed-key" — explicit argument beats environment, matching
+the NewsAPI precedence in test [113].
+
+[148] test_missing_endpoint_raises_error — PASSED
+An empty AZURE_OPENAI_ENDPOINT raised RuntimeError naming that variable.
+
+[149] test_missing_api_key_raises_error — PASSED
+A valid endpoint with an empty AZURE_OPENAI_API_KEY raised RuntimeError naming
+AZURE_OPENAI_API_KEY.
+
+[150] test_default_api_version — PASSED
+With AZURE_OPENAI_API_VERSION deleted from the environment, the builder still
+passed api_version "2024-10-21" — there is a baked-in default so only endpoint
+and key are strictly required. Note this test mutates os.environ directly with
+`del` before entering patch.dict, so unlike its siblings it does not fully
+restore the variable afterwards; harmless here, but it is the one env-handling
+wrinkle in this file.
+
+--- class TestLocalHFModelImplementation (3 tests) ---
+
+[151] test_initialize_with_defaults — PASSED
+LocalHFModel defaulted max_input_tokens to 2048 and max_output_tokens to 512.
+
+[152] test_initialize_with_custom_token_limits — PASSED
+max_input_tokens=4096 and max_output_tokens=1024 were stored as given.
+
+[153] test_sets_pad_token_when_missing — PASSED
+A mock tokenizer with pad_token None and eos_token "</s>" ended up with
+pad_token == "</s>" after construction. Many causal LMs ship without a padding
+token, and batched generation fails without one, so the model back-fills it from
+the end-of-sequence token.
+
+
+=====================================================================
+FILE 7 — tests/business/rag/re_ranker/test_re_ranker.py  (3 tests, all passed)
+Exercises the ReRanker in src/business/rag/re_ranker/re_ranker.py. The scorer is
+swapped for MockScorer (tests/business/rag/re_ranker/mocks.py), which assigns a
+deterministic rerank_score of i*0.1 by input position — so chunk 0 scores 0.0,
+chunk 1 scores 0.1, up to chunk 4 at 0.4. Every chunk is built by _make_chunks()
+with an identical vector_score of 1.0. That is deliberate: it isolates the
+re-ranker's own sorting and gating from the vector search that fed it, and means
+these tests never load the real BAAI/bge-reranker-base cross-encoder.
+=====================================================================
+
+[154] test_reranker_sorts_by_rerank_score — PASSED
+This is the test you asked about. Setup: ReRankerConfig(top_n_output=3,
+min_score=0.0) and five chunks. MockScorer assigns scores [0.0, 0.1, 0.2, 0.3,
+0.4] in input order — that is, ASCENDING, the opposite of the desired output
+order, which is what makes the test meaningful. The re-ranker gated at 0.0
+(nothing dropped, since all five scores are >= 0.0), sorted descending, then
+truncated to 3. Two assertions: the extracted score list equals itself sorted in
+reverse, and the result length is exactly 3. So the concrete value produced was
+a 3-element list of ReRankedChunk scored [0.4, 0.3, 0.2] — chunks 4, 3 and 2,
+with chunks 1 and 0 dropped by the top_n truncation. The output of the test
+itself is just "PASSED": both assertions held.
+Why it matters: top_n_output is the precision knob that decides how much context
+reaches the prompt builder. If sorting were wrong, truncation would keep the
+LEAST relevant chunks and quietly degrade every RAG answer.
+
+[155] test_reranker_applies_gating — PASSED
+Setup: ReRankerConfig(min_score=0.3), leaving top_n_output at its default of 8,
+and the same five chunks scored [0.0 .. 0.4]. Asserts every surviving chunk has
+rerank_score >= 0.3. The gate dropped chunks scoring 0.0, 0.1 and 0.2, returning
+the two chunks scored 0.4 and 0.3. Because top_n_output (8) exceeds the number
+of survivors (2), this test isolates gating from truncation — the filter alone
+determined the result. This threshold is the hallucination firewall described in
+the config: weakly-related chunks never reach the LLM prompt, so the model
+cannot cite them.
+
+[156] test_empty_input_returns_empty — PASSED
+re_rank("query", []) returned exactly []. The guard short-circuits before the
+scorer is invoked, so an empty retrieval never pays for a cross-encoder call
+and never raises on an empty batch.
+
+=====================================================================
+FILE 8 — tests/business/rag/test_orchestrator.py  (2 tests, all passed)
+Exercises select_context() in src/business/rag/re_ranker/orchestrator.py — the
+policy layer that decides what happens when re-ranking yields nothing. Both
+tests use EmptyScorer, which returns [] for any input, forcing the re-ranker to
+produce no chunks so the fallback policy is the only thing under test.
+
+NOTE: this file was NOT RUNNING AT ALL before this session. It imported
+`src.business.rag.orchestrator`, which does not exist — the module actually
+lives at src.business.rag.re_ranker.orchestrator. Collection failed with
+ModuleNotFoundError and both tests were silently absent from every run. Fixing
+the import path is why the suite went from 155 to 158 tests (these 2 plus one
+new DuckDuckGo case).
+=====================================================================
+
+[157] test_fail_closed_policy — PASSED
+Setup: ReRanker(EmptyScorer(), ReRankerConfig(top_n_output=2)) with five
+retrieved chunks, policy="fail_closed". Re-ranking produced nothing, so the
+policy decided the outcome. Returned exactly ([], "none"): no context and a
+confidence label of "none". The caller is expected to turn that into a refusal
+("I don't have enough information") rather than calling the LLM. This is the
+setting for high-risk domains — the five perfectly good vector hits are
+deliberately thrown away because nothing cleared the relevance bar.
+
+[158] test_fail_open_policy — PASSED
+Identical setup but policy="fail_open". Returned a 2-element list with
+confidence "low". The fallback slices the ORIGINAL retrieved chunks to
+reranker.config.top_n_output (2 here), so the caller still gets context — but
+these are plain RetrievedChunk objects with only vector_score, not ReRankedChunk
+with a rerank_score. That type difference is load-bearing elsewhere: query_rag
+in src/business/rag/__init__.py detects the fallback by testing
+hasattr(chunk, "rerank_score") and increments
+rag_retrieval_low_confidence_total when it is absent. So this test also pins the
+shape that the retrieval-quality metric depends on.
+
+
+=====================================================================
+CROSS-CUTTING OBSERVATIONS
+=====================================================================
+
+1. All 158 assertions held; there is no partial or skipped coverage. Total
+   runtime 13.34s, most of it real time.sleep() in test_ratelimiter.py.
+
+2. Four of these tests were failing or absent before this session, and the
+   reasons were split evenly between real product bugs and bad tests:
+     - [2] and [3]  — real bug: send_message re-reported its own 400 as a 500.
+     - [117]        — real bug: a NewsAPI quota/auth failure was indistinguish-
+                      able from "no results" to the agent.
+     - [14]         — bad test: mocked sources as strings, not dicts.
+     - [119]        — bad test: asserted a default while .env overrode it.
+     - [105]        — bad test: named the wrong dependency entirely.
+     - [157], [158] — never ran: wrong import path.
+
+3. Three DuckDuckGo tests were passing VACUOUSLY before the rewrite — they
+   patched a library the code no longer uses, hit the live network, fell into
+   the broad `except Exception`, and satisfied their own loose assertions with
+   the resulting error entry. A green tick is not by itself evidence that the
+   path under test executed. That is worth remembering when reading any of the
+   remaining loose assertions in this suite, such as [135], which asserts only
+   that a call happened and not what it contained.
+
+4. Coverage gaps this suite does NOT address, despite the 100% pass rate:
+     - No test covers ChatController.list_sessions or delete_session.
+     - No integration test drives a real FastAPI request through the router;
+       every controller test calls the static methods directly, so routing,
+       dependency injection and the rate-limit middleware are untested.
+     - TokenBucket is exercised single-threaded only; it takes no lock, so
+       [45] does not establish thread safety under real concurrent workers.
+     - src/business/rag/retrieval.py, vector_store.py and the PDF ingestion
+       pipeline have no unit tests at all.
+     - tests/business/rag/re_ranker/run_reranker_smoke_test.py is collected by
+       pytest (its name matches the *_test.py pattern) but defines no test_*
+       functions, so it contributes zero tests and always has.

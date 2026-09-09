@@ -1,0 +1,198 @@
+CORTEX TEST RESULTS
+===================
+Date:        2026-09-04 11:06:00 EDT
+Interpreter: /Library/Frameworks/Python.framework/Versions/3.11/bin/python3
+Python:      Python 3.11.4
+pytest:      pytest 9.1.1
+Branch:      feat/monitoring-stack
+Commit:      d6db563
+Command:     python3 -m pytest tests/ -v
+
+==================== FULL OUTPUT ====================
+
+============================= test session starts ==============================
+platform darwin -- Python 3.11.4, pytest-9.1.1, pluggy-1.6.0 -- /Library/Frameworks/Python.framework/Versions/3.11/bin/python3
+rootdir: /Users/amirshahcheraghian/AI Projects/cortex
+configfile: pytest.ini
+plugins: Faker-40.37.0, asyncio-1.4.0, anyio-3.7.1
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collecting ... collected 158 items
+
+tests/api/test_controller.py::TestChatControllerSendMessage::test_send_message_success PASSED [  0%]
+tests/api/test_controller.py::TestChatControllerSendMessage::test_send_message_empty_message PASSED [  1%]
+tests/api/test_controller.py::TestChatControllerSendMessage::test_send_message_whitespace_only PASSED [  1%]
+tests/api/test_controller.py::TestChatControllerSendMessage::test_send_message_records_metrics PASSED [  2%]
+tests/api/test_controller.py::TestChatControllerSendMessage::test_send_message_handles_business_logic_error PASSED [  3%]
+tests/api/test_controller.py::TestChatControllerSendMessage::test_send_message_handles_value_error PASSED [  3%]
+tests/api/test_controller.py::TestChatControllerSendMessage::test_send_message_without_tokens PASSED [  4%]
+tests/api/test_controller.py::TestChatControllerGetHistory::test_get_history_success PASSED [  5%]
+tests/api/test_controller.py::TestChatControllerGetHistory::test_get_history_invalid_user_id PASSED [  5%]
+tests/api/test_controller.py::TestChatControllerGetHistory::test_get_history_negative_user_id PASSED [  6%]
+tests/api/test_controller.py::TestChatControllerGetHistory::test_get_history_empty_messages PASSED [  6%]
+tests/api/test_controller.py::TestChatControllerGetHistory::test_get_history_reraises_http_exception PASSED [  7%]
+tests/api/test_controller.py::TestChatControllerGetHistory::test_get_history_handles_other_errors PASSED [  8%]
+tests/api/test_controller.py::TestRAGControllerQuery::test_query_success PASSED [  8%]
+tests/api/test_controller.py::TestRAGControllerQuery::test_query_empty_question PASSED [  9%]
+tests/api/test_controller.py::TestRAGControllerQuery::test_query_whitespace_only PASSED [ 10%]
+tests/api/test_controller.py::TestRAGControllerQuery::test_query_handles_errors PASSED [ 10%]
+tests/api/test_controller.py::TestRAGControllerUpload::test_upload_pdf_success PASSED [ 11%]
+tests/api/test_controller.py::TestRAGControllerUpload::test_upload_non_pdf_file PASSED [ 12%]
+tests/api/test_controller.py::TestRAGControllerUpload::test_upload_no_filename PASSED [ 12%]
+tests/api/test_controller.py::TestRAGControllerUpload::test_upload_case_insensitive_extension PASSED [ 13%]
+tests/api/test_controller.py::TestRAGControllerUpload::test_upload_records_metrics PASSED [ 13%]
+tests/api/test_controller.py::TestRAGControllerUpload::test_upload_removes_old_pdfs PASSED [ 14%]
+tests/api/test_controller.py::TestRAGControllerUpload::test_upload_handles_errors PASSED [ 15%]
+tests/api/test_ratelimiter.py::TestTokenBucketInitialization::test_initializes_with_full_capacity PASSED [ 15%]
+tests/api/test_ratelimiter.py::TestTokenBucketInitialization::test_initializes_with_zero_capacity PASSED [ 16%]
+tests/api/test_ratelimiter.py::TestTokenBucketInitialization::test_initializes_with_fractional_refill_rate PASSED [ 17%]
+tests/api/test_ratelimiter.py::TestTokenBucketConsumption::test_consumes_single_token PASSED [ 17%]
+tests/api/test_ratelimiter.py::TestTokenBucketConsumption::test_consumes_multiple_tokens PASSED [ 18%]
+tests/api/test_ratelimiter.py::TestTokenBucketConsumption::test_consumes_all_tokens PASSED [ 18%]
+tests/api/test_ratelimiter.py::TestTokenBucketConsumption::test_rejects_when_insufficient_tokens PASSED [ 19%]
+tests/api/test_ratelimiter.py::TestTokenBucketConsumption::test_rejects_empty_bucket PASSED [ 20%]
+tests/api/test_ratelimiter.py::TestTokenBucketRefill::test_refills_over_time PASSED [ 20%]
+tests/api/test_ratelimiter.py::TestTokenBucketRefill::test_refill_respects_capacity PASSED [ 21%]
+tests/api/test_ratelimiter.py::TestTokenBucketRefill::test_zero_refill_rate_stays_empty PASSED [ 22%]
+tests/api/test_ratelimiter.py::TestTokenBucketRefill::test_fractional_token_accumulation PASSED [ 22%]
+tests/api/test_ratelimiter.py::TestTokenBucketEdgeCases::test_consume_zero_tokens PASSED [ 23%]
+tests/api/test_ratelimiter.py::TestTokenBucketEdgeCases::test_negative_consumption_not_validated PASSED [ 24%]
+tests/api/test_ratelimiter.py::TestTokenBucketEdgeCases::test_large_capacity PASSED [ 24%]
+tests/api/test_ratelimiter.py::TestTokenBucketEdgeCases::test_very_small_refill_rate PASSED [ 25%]
+tests/api/test_ratelimiter.py::TestTokenBucketRealWorldScenarios::test_steady_request_stream_under_limit PASSED [ 25%]
+tests/api/test_ratelimiter.py::TestTokenBucketRealWorldScenarios::test_burst_then_wait_pattern PASSED [ 26%]
+tests/api/test_ratelimiter.py::TestTokenBucketRealWorldScenarios::test_request_at_exact_rate PASSED [ 27%]
+tests/api/test_ratelimiter.py::TestTokenBucketRealWorldScenarios::test_api_rate_limit_scenario PASSED [ 27%]
+tests/api/test_ratelimiter.py::TestTokenBucketConcurrency::test_rapid_consume_calls_same_tick PASSED [ 28%]
+tests/api/test_ratelimiter.py::TestTokenBucketConcurrency::test_refill_timestamp_updates_correctly PASSED [ 29%]
+tests/api/test_ratelimiter.py::TestTokenBucketConcurrency::test_multiple_refills_accumulate PASSED [ 29%]
+tests/business/core/test_cost.py::TestCalculateChatCost::test_calculate_cost_gpt_4o_openai PASSED [ 30%]
+tests/business/core/test_cost.py::TestCalculateChatCost::test_calculate_cost_gpt_3_5_turbo PASSED [ 31%]
+tests/business/core/test_cost.py::TestCalculateChatCost::test_calculate_cost_partial_tokens PASSED [ 31%]
+tests/business/core/test_cost.py::TestCalculateChatCost::test_calculate_cost_zero_output_tokens PASSED [ 32%]
+tests/business/core/test_cost.py::TestCalculateChatCost::test_calculate_cost_zero_input_tokens PASSED [ 32%]
+tests/business/core/test_cost.py::TestCalculateChatCost::test_calculate_cost_unknown_model PASSED [ 33%]
+tests/business/core/test_cost.py::TestCalculateChatCost::test_calculate_cost_azure_openai PASSED [ 34%]
+tests/business/core/test_cost.py::TestCalculateChatCost::test_cost_precision PASSED [ 34%]
+tests/business/core/test_cost.py::TestCalculateChatCost::test_calculate_cost_large_numbers PASSED [ 35%]
+tests/business/core/test_cost.py::TestCalculateEmbeddingCost::test_calculate_embedding_cost_small PASSED [ 36%]
+tests/business/core/test_cost.py::TestCalculateEmbeddingCost::test_calculate_embedding_cost_large PASSED [ 36%]
+tests/business/core/test_cost.py::TestCalculateEmbeddingCost::test_calculate_embedding_cost_partial PASSED [ 37%]
+tests/business/core/test_cost.py::TestCalculateEmbeddingCost::test_calculate_embedding_cost_zero PASSED [ 37%]
+tests/business/core/test_cost.py::TestCalculateEmbeddingCost::test_calculate_embedding_cost_unknown_model PASSED [ 38%]
+tests/business/core/test_cost.py::TestCalculateEmbeddingCost::test_calculate_embedding_cost_azure PASSED [ 39%]
+tests/business/core/test_cost.py::TestCalculateEmbeddingCost::test_embedding_cost_precision PASSED [ 39%]
+tests/business/core/test_cost.py::TestGetModelPricing::test_get_pricing_openai PASSED [ 40%]
+tests/business/core/test_cost.py::TestGetModelPricing::test_get_pricing_azure PASSED [ 41%]
+tests/business/core/test_cost.py::TestGetModelPricing::test_get_pricing_unknown_model PASSED [ 41%]
+tests/business/core/test_cost.py::TestGetModelPricing::test_get_pricing_default_provider PASSED [ 42%]
+tests/business/core/test_cost.py::TestGetEmbeddingPricing::test_get_embedding_pricing_small PASSED [ 43%]
+tests/business/core/test_cost.py::TestGetEmbeddingPricing::test_get_embedding_pricing_large PASSED [ 43%]
+tests/business/core/test_cost.py::TestGetEmbeddingPricing::test_get_embedding_pricing_unknown PASSED [ 44%]
+tests/business/core/test_cost.py::TestGetEmbeddingPricing::test_get_embedding_pricing_azure PASSED [ 44%]
+tests/business/core/test_cost.py::TestModelPricingDataclass::test_model_pricing_creation PASSED [ 45%]
+tests/business/core/test_cost.py::TestEmbeddingPricingDataclass::test_embedding_pricing_creation PASSED [ 46%]
+tests/business/core/test_embedding.py::TestEmbedderInterface::test_cannot_instantiate_abstract_base PASSED [ 46%]
+tests/business/core/test_embedding.py::TestEmbedderInterface::test_subclass_must_implement_methods PASSED [ 47%]
+tests/business/core/test_embedding.py::TestOpenAIEmbedderInitialization::test_initializes_with_api_key PASSED [ 48%]
+tests/business/core/test_embedding.py::TestOpenAIEmbedderInitialization::test_initializes_with_custom_model PASSED [ 48%]
+tests/business/core/test_embedding.py::TestOpenAIEmbedderInitialization::test_accepts_preconfigured_client PASSED [ 49%]
+tests/business/core/test_embedding.py::TestOpenAIEmbedderInitialization::test_creates_client_from_api_key PASSED [ 50%]
+tests/business/core/test_embedding.py::TestOpenAIEmbedderEmbedQuery::test_embed_single_query PASSED [ 50%]
+tests/business/core/test_embedding.py::TestOpenAIEmbedderEmbedQuery::test_embed_query_is_list PASSED [ 51%]
+tests/business/core/test_embedding.py::TestOpenAIEmbedderEmbedQuery::test_embed_query_uses_correct_model PASSED [ 51%]
+tests/business/core/test_embedding.py::TestOpenAIEmbedderEmbedDocuments::test_embed_empty_list PASSED [ 52%]
+tests/business/core/test_embedding.py::TestOpenAIEmbedderEmbedDocuments::test_embed_multiple_documents PASSED [ 53%]
+tests/business/core/test_embedding.py::TestOpenAIEmbedderEmbedDocuments::test_embed_documents_batches_correctly PASSED [ 53%]
+tests/business/core/test_embedding.py::TestOpenAIEmbedderBackwardCompatibility::test_embed_method_calls_embed_query PASSED [ 54%]
+tests/business/core/test_embedding.py::TestOpenAIEmbedderRetryLogic::test_retries_on_internal_server_error PASSED [ 55%]
+tests/business/core/test_embedding.py::TestOpenAIEmbedderRetryLogic::test_gives_up_after_max_retries PASSED [ 55%]
+tests/business/core/test_embedding.py::TestOpenAIEmbedderRetryLogic::test_retry_delay_increases_exponentially PASSED [ 56%]
+tests/business/core/test_embedding.py::TestCreateEmbedderFactory::test_default_provider_is_openai PASSED [ 56%]
+tests/business/core/test_embedding.py::TestCreateEmbedderFactory::test_explicit_openai_provider PASSED [ 57%]
+tests/business/core/test_embedding.py::TestCreateEmbedderFactory::test_custom_model_name PASSED [ 58%]
+tests/business/core/test_embedding.py::TestCreateEmbedderFactory::test_openai_requires_api_key PASSED [ 58%]
+tests/business/core/test_embedding.py::TestCreateEmbedderFactory::test_azure_openai_provider PASSED [ 59%]
+tests/business/core/test_embedding.py::TestCreateEmbedderFactory::test_azure_requires_embedding_deployment_name PASSED [ 60%]
+tests/business/core/test_embedding.py::TestCreateEmbedderFactory::test_unknown_provider_raises_error PASSED [ 60%]
+tests/business/core/test_embedding.py::TestCreateEmbedderFactory::test_case_insensitive_provider PASSED [ 61%]
+tests/business/core/test_embedding.py::TestCreateEmbedderFactory::test_env_var_provider_selection PASSED [ 62%]
+tests/business/core/test_live_data.py::TestLiveDataProviderInterface::test_cannot_instantiate_abstract_base PASSED [ 62%]
+tests/business/core/test_live_data.py::TestLiveDataProviderInterface::test_subclass_must_implement_search PASSED [ 63%]
+tests/business/core/test_live_data.py::TestMockLiveDataProvider::test_search_returns_results PASSED [ 63%]
+tests/business/core/test_live_data.py::TestMockLiveDataProvider::test_search_respects_limit PASSED [ 64%]
+tests/business/core/test_live_data.py::TestMockLiveDataProvider::test_search_returns_dict_structure PASSED [ 65%]
+tests/business/core/test_live_data.py::TestMockLiveDataProvider::test_search_includes_query_in_results PASSED [ 65%]
+tests/business/core/test_live_data.py::TestDuckDuckGoSearchProvider::test_initialization_checks_ddgs PASSED [ 66%]
+tests/business/core/test_live_data.py::TestDuckDuckGoSearchProvider::test_search_makes_api_call PASSED [ 67%]
+tests/business/core/test_live_data.py::TestDuckDuckGoSearchProvider::test_search_returns_empty_when_no_results PASSED [ 67%]
+tests/business/core/test_live_data.py::TestDuckDuckGoSearchProvider::test_search_handles_api_error PASSED [ 68%]
+tests/business/core/test_live_data.py::TestDuckDuckGoSearchProvider::test_search_respects_limit PASSED [ 68%]
+tests/business/core/test_live_data.py::TestNewsAPIProvider::test_initialization_requires_api_key PASSED [ 69%]
+tests/business/core/test_live_data.py::TestNewsAPIProvider::test_initialization_accepts_api_key_parameter PASSED [ 70%]
+tests/business/core/test_live_data.py::TestNewsAPIProvider::test_initialization_from_env_var PASSED [ 70%]
+tests/business/core/test_live_data.py::TestNewsAPIProvider::test_initialization_prefers_parameter_over_env PASSED [ 71%]
+tests/business/core/test_live_data.py::TestNewsAPIProvider::test_initialization_checks_requests PASSED [ 72%]
+tests/business/core/test_live_data.py::TestNewsAPIProvider::test_search_makes_api_call PASSED [ 72%]
+tests/business/core/test_live_data.py::TestNewsAPIProvider::test_search_handles_api_error PASSED [ 73%]
+tests/business/core/test_live_data.py::TestNewsAPIProvider::test_search_handles_api_error_response PASSED [ 74%]
+tests/business/core/test_live_data.py::TestNewsAPIProvider::test_search_respects_limit PASSED [ 74%]
+tests/business/core/test_live_data.py::TestCreateLiveDataProviderFactory::test_default_provider_is_mock PASSED [ 75%]
+tests/business/core/test_live_data.py::TestCreateLiveDataProviderFactory::test_explicit_mock_provider PASSED [ 75%]
+tests/business/core/test_live_data.py::TestCreateLiveDataProviderFactory::test_duckduckgo_provider PASSED [ 76%]
+tests/business/core/test_live_data.py::TestCreateLiveDataProviderFactory::test_newsapi_provider PASSED [ 77%]
+tests/business/core/test_live_data.py::TestCreateLiveDataProviderFactory::test_env_var_provider_selection PASSED [ 77%]
+tests/business/core/test_live_data.py::TestCreateLiveDataProviderFactory::test_parameter_overrides_env_var PASSED [ 78%]
+tests/business/core/test_live_data.py::TestCreateLiveDataProviderFactory::test_case_insensitive_provider_name PASSED [ 79%]
+tests/business/core/test_live_data.py::TestCreateLiveDataProviderFactory::test_unknown_provider_raises_error PASSED [ 79%]
+tests/business/core/test_live_data.py::TestCreateLiveDataProviderFactory::test_passes_kwargs_to_newsapi PASSED [ 80%]
+tests/business/core/test_model.py::TestBaseLLMInterface::test_cannot_instantiate_abstract_base PASSED [ 81%]
+tests/business/core/test_model.py::TestBaseLLMInterface::test_subclass_must_implement_generate PASSED [ 81%]
+tests/business/core/test_model.py::TestOpenAIModelImplementation::test_initialize_with_defaults PASSED [ 82%]
+tests/business/core/test_model.py::TestOpenAIModelImplementation::test_initialize_with_custom_params PASSED [ 82%]
+tests/business/core/test_model.py::TestOpenAIModelImplementation::test_generate_calls_client_correctly PASSED [ 83%]
+tests/business/core/test_model.py::TestOpenAIModelImplementation::test_generate_returns_stripped_response PASSED [ 84%]
+tests/business/core/test_model.py::TestOpenAIModelImplementation::test_generate_with_empty_context PASSED [ 84%]
+tests/business/core/test_model.py::TestOpenAIModelImplementation::test_generate_with_multiple_context_items PASSED [ 85%]
+tests/business/core/test_model.py::TestCreateLLMFactory::test_default_provider_is_openai PASSED [ 86%]
+tests/business/core/test_model.py::TestCreateLLMFactory::test_explicit_openai_provider PASSED [ 86%]
+tests/business/core/test_model.py::TestCreateLLMFactory::test_env_var_provider_openai PASSED [ 87%]
+tests/business/core/test_model.py::TestCreateLLMFactory::test_custom_model_name PASSED [ 87%]
+tests/business/core/test_model.py::TestCreateLLMFactory::test_openai_requires_api_key PASSED [ 88%]
+tests/business/core/test_model.py::TestCreateLLMFactory::test_huggingface_provider PASSED [ 89%]
+tests/business/core/test_model.py::TestCreateLLMFactory::test_azure_openai_provider PASSED [ 89%]
+tests/business/core/test_model.py::TestCreateLLMFactory::test_azure_openai_requires_deployment_name PASSED [ 90%]
+tests/business/core/test_model.py::TestCreateLLMFactory::test_unknown_provider_raises_error PASSED [ 91%]
+tests/business/core/test_model.py::TestCreateLLMFactory::test_case_insensitive_provider PASSED [ 91%]
+tests/business/core/test_model.py::TestBuildAzureOpenAIClient::test_builds_azure_client_from_env PASSED [ 92%]
+tests/business/core/test_model.py::TestBuildAzureOpenAIClient::test_prefers_passed_api_key PASSED [ 93%]
+tests/business/core/test_model.py::TestBuildAzureOpenAIClient::test_missing_endpoint_raises_error PASSED [ 93%]
+tests/business/core/test_model.py::TestBuildAzureOpenAIClient::test_missing_api_key_raises_error PASSED [ 94%]
+tests/business/core/test_model.py::TestBuildAzureOpenAIClient::test_default_api_version PASSED [ 94%]
+tests/business/core/test_model.py::TestLocalHFModelImplementation::test_initialize_with_defaults PASSED [ 95%]
+tests/business/core/test_model.py::TestLocalHFModelImplementation::test_initialize_with_custom_token_limits PASSED [ 96%]
+tests/business/core/test_model.py::TestLocalHFModelImplementation::test_sets_pad_token_when_missing PASSED [ 96%]
+tests/business/rag/re_ranker/test_re_ranker.py::test_reranker_sorts_by_rerank_score PASSED [ 97%]
+tests/business/rag/re_ranker/test_re_ranker.py::test_reranker_applies_gating PASSED [ 98%]
+tests/business/rag/re_ranker/test_re_ranker.py::test_empty_input_returns_empty PASSED [ 98%]
+tests/business/rag/test_orchestrator.py::test_fail_closed_policy PASSED  [ 99%]
+tests/business/rag/test_orchestrator.py::test_fail_open_policy PASSED    [100%]
+
+============================= 158 passed in 13.34s =============================
+
+==================== SUMMARY BY FILE ====================
+
+tests/api/test_controller.py                    24 passed
+tests/api/test_ratelimiter.py                   23 passed
+tests/business/core/test_cost.py                26 passed
+tests/business/core/test_embedding.py           25 passed
+tests/business/core/test_live_data.py           29 passed
+tests/business/core/test_model.py               26 passed
+tests/business/rag/re_ranker/test_re_ranker.py  3 passed
+tests/business/rag/test_orchestrator.py         2 passed
+
+==================== TOTALS ====================
+
+passed   158
+TOTAL    158
+
+Result: ALL TESTS PASSED

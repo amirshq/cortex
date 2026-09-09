@@ -15,6 +15,8 @@ from src.database.dto import (
     ChatMessageResponse,
     ChatHistoryRequest,
     ChatHistoryResponse,
+    ListSessionsResponse,
+    DeleteSessionResponse,
     RAGQueryRequest,
     RAGQueryResponse,
     RAGUploadResponse,
@@ -73,6 +75,18 @@ async def chat_history_endpoint(
         offset=offset
     )
     return await chat_controller.get_chat_history(request)
+
+
+@router.get("/sessions", response_model=ListSessionsResponse)
+def list_sessions_endpoint(user_id: int):
+    """List all chat sessions for a user."""
+    return chat_controller.list_sessions(user_id)
+
+
+@router.delete("/sessions/{session_id}", response_model=DeleteSessionResponse)
+def delete_session_endpoint(user_id: int, session_id: str):
+    """Delete a chat session and all its messages."""
+    return chat_controller.delete_session(user_id, session_id)
 
 
 # ---------------------------------------------------------------------------

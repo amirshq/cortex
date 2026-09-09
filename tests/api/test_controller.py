@@ -266,15 +266,18 @@ class TestRAGControllerQuery:
         request = RAGQueryRequest(question="What is AI?")
 
         with patch("src.api.controller.query_rag", new_callable=AsyncMock) as mock_query:
+            # query_rag returns source *chunks*, not filenames — matching the
+            # List[dict] shape RAGQueryResponse.sources declares.
+            sources = [{"text": "AI is...", "metadata": {"source_id": "document1.pdf"}, "score": 0.87}]
             mock_query.return_value = {
                 "answer": "AI is...",
-                "sources": ["document1.pdf"]
+                "sources": sources,
             }
 
             response = await RAGController.query(request)
 
             assert response.answer == "AI is..."
-            assert response.sources == ["document1.pdf"]
+            assert response.sources == sources
 
     @pytest.mark.asyncio
     async def test_query_empty_question(self):

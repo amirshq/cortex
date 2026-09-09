@@ -9,6 +9,8 @@ from src.database.dto import (
     ChatMessageResponse,
     ChatHistoryRequest,
     ChatHistoryResponse,
+    ListSessionsResponse,
+    DeleteSessionResponse,
     RAGQueryRequest,
     RAGQueryResponse,
     RAGUploadResponse,
@@ -25,6 +27,7 @@ from src.api.metrics import (
 from src.business.chatbot import process_chat_message, get_chat_history
 from src.business.rag import query_rag, ingest_pdfs
 from src.business.core.cost import calculate_chat_cost
+from src.memory.chat_history_manager import ChatHistoryManager
 import os
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -82,6 +85,11 @@ class ChatController:
                 # If business logic already returns ChatMessageResponse
                 return result
                 
+        except HTTPException:
+            # Re-raise HTTP exceptions (already formatted) — without this the
+            # 400 raised above for an empty message would be swallowed by the
+            # generic handler below and re-reported to the client as a 500.
+            raise
         except ValueError as e:
             # Handle validation errors from business logic
             raise HTTPException(
@@ -99,13 +107,13 @@ class ChatController:
     async def get_chat_history(request: ChatHistoryRequest) -> ChatHistoryResponse:
         """
         Handle chat history retrieval requests.
-        
+
         Flow:
         1. Validate request (user_id, pagination params)
         2. Call business logic to fetch from database
         3. Format response as ChatHistoryResponse
         4. Return response
-        
+
         Note: History should come from database via business logic,
         NOT hardcoded in the controller (follows clean architecture).
         """
@@ -116,7 +124,7 @@ class ChatController:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Invalid user_id"
                 )
-            
+
             # Step 2: Fetch history from Redis via business logic
             result = await get_chat_history(request)
 
@@ -126,7 +134,7 @@ class ChatController:
                 total=result["total"],
                 session_id=result["session_id"],
             )
-            
+
         except HTTPException:
             # Re-raise HTTP exceptions (already formatted)
             raise
@@ -135,6 +143,79 @@ class ChatController:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to retrieve chat history: {str(e)}"
+            )
+
+    @staticmethod
+    def list_sessions(user_id: int) -> ListSessionsResponse:
+        """
+        List all chat sessions for a user.
+
+        Returns sessions ordered by most recent first.
+        """
+        try:
+            if user_id <= 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid user_id"
+                )
+
+            manager = ChatHistoryManager()
+            sessions = manager.list_sessions(str(user_id))
+
+            return ListSessionsResponse(
+                sessions=[
+                    {
+                        "id": s["id"],
+                        "title": s["title"],
+                        "created_at": s["created_at"],
+                    }
+                    for s in sessions
+                ]
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to list sessions: {str(e)}"
+            )
+
+    @staticmethod
+    def delete_session(user_id: int, session_id: str) -> DeleteSessionResponse:
+        """
+        Delete a chat session and all its messages.
+
+        Validates that the session belongs to the user before deleting.
+        """
+        try:
+            if user_id <= 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid user_id"
+                )
+
+            if not session_id or not session_id.strip():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid session_id"
+                )
+
+            manager = ChatHistoryManager()
+            deleted = manager.delete_session(session_id, str(user_id))
+
+            if not deleted:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Session not found"
+                )
+
+            return DeleteSessionResponse(success=True)
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to delete session: {str(e)}"
             )
 
 

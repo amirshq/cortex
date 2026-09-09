@@ -78,41 +78,56 @@ class TestMockLiveDataProvider:
 
 
 class TestDuckDuckGoSearchProvider:
-    """Test DuckDuckGo search provider."""
+    """Test DuckDuckGo search provider.
 
-    def test_initialization_checks_requests(self):
-        """DuckDuckGo provider requires requests library."""
-        with patch("src.business.core.live_data.requests", None):
-            with pytest.raises(RuntimeError, match="requests"):
+    The provider talks to the duckduckgo-search package (DDGS), not to
+    ``requests`` — so every test here patches ``live_data.DDGS`` and no test
+    touches the network.
+    """
+
+    def test_initialization_checks_ddgs(self):
+        """DuckDuckGo provider requires the duckduckgo-search library."""
+        with patch("src.business.core.live_data.DDGS", None):
+            with pytest.raises(RuntimeError, match="duckduckgo-search"):
                 DuckDuckGoSearchProvider()
 
     def test_search_makes_api_call(self):
-        """search() calls DuckDuckGo API."""
-        provider = DuckDuckGoSearchProvider()
+        """search() queries DDGS and maps its fields onto the common shape."""
+        mock_ddgs = Mock()
+        mock_ddgs.text.return_value = [
+            {"title": "Result 1", "body": "Body 1", "href": "https://example.com/1"},
+            {"title": "Result 2", "body": "Body 2", "href": "https://example.com/2"},
+        ]
 
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            "Heading": "Test",
-            "AbstractText": "Test abstract",
-            "AbstractURL": "https://example.com",
-            "RelatedTopics": [
-                {"Text": "Result 1", "FirstURL": "https://example.com/1"},
-                {"Text": "Result 2", "FirstURL": "https://example.com/2"},
-            ]
-        }
-
-        with patch("src.business.core.live_data.requests.get", return_value=mock_response):
+        with patch("src.business.core.live_data.DDGS", return_value=mock_ddgs):
+            provider = DuckDuckGoSearchProvider()
             results = provider.search("test query")
 
-        assert len(results) > 0
-        assert all("title" in r for r in results)
-        assert all("summary" in r for r in results)
+        mock_ddgs.text.assert_called_once_with("test query", max_results=5)
+        assert len(results) == 2
+        assert results[0]["title"] == "Result 1"
+        assert results[0]["summary"] == "Body 1"
+        assert results[0]["url"] == "https://example.com/1"
+        assert all(r["source"] == "DuckDuckGo" for r in results)
+
+    def test_search_returns_empty_when_no_results(self):
+        """search() returns an empty list when DDGS finds nothing."""
+        mock_ddgs = Mock()
+        mock_ddgs.text.return_value = []
+
+        with patch("src.business.core.live_data.DDGS", return_value=mock_ddgs):
+            provider = DuckDuckGoSearchProvider()
+            results = provider.search("test")
+
+        assert results == []
 
     def test_search_handles_api_error(self):
         """search() handles API errors gracefully."""
-        provider = DuckDuckGoSearchProvider()
+        mock_ddgs = Mock()
+        mock_ddgs.text.side_effect = Exception("API error")
 
-        with patch("src.business.core.live_data.requests.get", side_effect=Exception("API error")):
+        with patch("src.business.core.live_data.DDGS", return_value=mock_ddgs):
+            provider = DuckDuckGoSearchProvider()
             results = provider.search("test")
 
         assert len(results) > 0
@@ -120,22 +135,18 @@ class TestDuckDuckGoSearchProvider:
 
     def test_search_respects_limit(self):
         """search() respects limit parameter."""
-        provider = DuckDuckGoSearchProvider()
+        mock_ddgs = Mock()
+        mock_ddgs.text.return_value = [
+            {"title": f"Result {i}", "body": "Body", "href": f"https://example.com/{i}"}
+            for i in range(10)
+        ]
 
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            "Heading": "Test",
-            "AbstractText": "Abstract",
-            "RelatedTopics": [
-                {"Text": f"Result {i}", "FirstURL": f"https://example.com/{i}"}
-                for i in range(10)
-            ]
-        }
-
-        with patch("src.business.core.live_data.requests.get", return_value=mock_response):
+        with patch("src.business.core.live_data.DDGS", return_value=mock_ddgs):
+            provider = DuckDuckGoSearchProvider()
             results = provider.search("test", limit=3)
 
-        assert len(results) <= 3
+        mock_ddgs.text.assert_called_once_with("test", max_results=3)
+        assert len(results) == 3
 
 
 class TestNewsAPIProvider:
@@ -254,7 +265,12 @@ class TestCreateLiveDataProviderFactory:
 
     def test_default_provider_is_mock(self):
         """Default provider is mock."""
-        provider = create_live_data_provider()
+        # LIVE_DATA_PROVIDER must be cleared, not just left alone: importing the
+        # app pulls in load_dotenv(), so a developer's real .env would otherwise
+        # decide what this test sees as "the default".
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("LIVE_DATA_PROVIDER", None)
+            provider = create_live_data_provider()
         assert isinstance(provider, MockLiveDataProvider)
 
     def test_explicit_mock_provider(self):

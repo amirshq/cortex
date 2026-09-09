@@ -12,6 +12,11 @@ try:
 except ImportError:
     requests = None
 
+try:
+    from duckduckgo_search import DDGS
+except ImportError:
+    DDGS = None
+
 
 class LiveDataProvider(ABC):
     """Abstract base class for live data providers."""
@@ -37,19 +42,18 @@ class LiveDataProvider(ABC):
 
 class DuckDuckGoSearchProvider(LiveDataProvider):
     """
-    Web search using DuckDuckGo API (free, no API key required).
-
-    Note: This is a simple implementation using the public API.
-    For production use, consider official API or alternatives.
+    Web search using DuckDuckGo via duckduckgo-search library (free, no API key required).
+    
+    This uses the community-maintained duckduckgo-search package which is more reliable
+    than the public API.
     """
 
     def __init__(self):
-        if requests is None:
+        if DDGS is None:
             raise RuntimeError(
-                "requests library is required for DuckDuckGoSearchProvider. "
-                "Install with: pip install requests"
+                "duckduckgo-search library is required. "
+                "Install with: pip install duckduckgo-search"
             )
-        self.base_url = "https://api.duckduckgo.com"
 
     def search(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
         """
@@ -63,35 +67,18 @@ class DuckDuckGoSearchProvider(LiveDataProvider):
             List of search results (simplified format)
         """
         try:
-            params = {
-                "q": query,
-                "format": "json",
-                "no_redirect": 1,
-            }
-
-            response = requests.get(self.base_url, params=params, timeout=5)
-            response.raise_for_status()
-            data = response.json()
+            ddgs = DDGS(timeout=10)
+            results_raw = list(ddgs.text(query, max_results=limit))
+            
+            if not results_raw:
+                return []
 
             results = []
-
-            # Extract from related searches (if available)
-            if "RelatedTopics" in data:
-                for item in data["RelatedTopics"][:limit]:
-                    if isinstance(item, dict) and "Text" in item:
-                        results.append({
-                            "title": item.get("Text", "")[:200],
-                            "summary": item.get("Text", ""),
-                            "url": item.get("FirstURL", ""),
-                            "source": "DuckDuckGo"
-                        })
-
-            # Also include the abstract if available
-            if "AbstractText" in data and data["AbstractText"] and len(results) < limit:
-                results.insert(0, {
-                    "title": data.get("Heading", query),
-                    "summary": data["AbstractText"],
-                    "url": data.get("AbstractURL", ""),
+            for result in results_raw:
+                results.append({
+                    "title": result.get("title", ""),
+                    "summary": result.get("body", ""),
+                    "url": result.get("href", ""),
                     "source": "DuckDuckGo"
                 })
 
@@ -99,9 +86,10 @@ class DuckDuckGoSearchProvider(LiveDataProvider):
 
         except Exception as e:
             return [{
-                "title": f"Search failed: {str(e)}",
-                "summary": f"Unable to search for '{query}': {str(e)}",
-                "source": "DuckDuckGo"
+                "title": f"Search error",
+                "summary": f"Failed to search for '{query}': {str(e)}",
+                "source": "DuckDuckGo",
+                "url": ""
             }]
 
 
@@ -139,9 +127,13 @@ class NewsAPIProvider(LiveDataProvider):
             List of news articles
         """
         try:
+            # sortBy=relevancy, not publishedAt. This tool answers questions,
+            # and publishedAt returns whatever matched most *recently* rather
+            # than most *closely* — for "Christopher Nolan latest release" that
+            # meant unrelated round-ups instead of the article naming the film.
             params = {
                 "q": query,
-                "sortBy": "publishedAt",
+                "sortBy": "relevancy",
                 "apiKey": self.api_key,
                 "pageSize": limit,
             }
@@ -150,41 +142,46 @@ class NewsAPIProvider(LiveDataProvider):
             response.raise_for_status()
             data = response.json()
 
+            # Surface the API's own failure reason rather than an empty list:
+            # the agent's web_search tool reports an empty result as "no search
+            # results found", which would misreport a quota/auth failure as the
+            # topic simply having no coverage. Mirrors the except branch below.
             if data.get("status") != "ok":
                 return [{
-                    "title": "News search unavailable",
-                    "summary": f"NewsAPI error: {data.get('message', 'Unknown error')}",
-                    "source": "NewsAPI"
+                    "title": "News search error",
+                    "summary": (
+                        f"NewsAPI returned an error for '{query}': "
+                        f"{data.get('message', 'unknown error')}"
+                    ),
+                    "source": "NewsAPI",
+                    "url": "",
                 }]
 
             results = []
             for article in data.get("articles", [])[:limit]:
                 results.append({
                     "title": article.get("title", ""),
-                    "summary": article.get("description", ""),
-                    "source": article.get("source", {}).get("name", "NewsAPI"),
+                    "summary": article.get("description", "") or article.get("content", ""),
                     "url": article.get("url", ""),
-                    "published": article.get("publishedAt", ""),
+                    "source": article.get("source", {}).get("name", "NewsAPI")
                 })
 
             return results
 
         except Exception as e:
             return [{
-                "title": f"News search failed: {str(e)}",
-                "summary": f"Unable to search for '{query}': {str(e)}",
-                "source": "NewsAPI"
+                "title": f"News search error",
+                "summary": f"Failed to fetch news for '{query}': {str(e)}",
+                "source": "NewsAPI",
+                "url": ""
             }]
 
 
 class MockLiveDataProvider(LiveDataProvider):
-    """
-    Mock provider for testing (no external API calls).
-    Returns synthetic data matching the search query.
-    """
+    """Mock provider returning synthetic demo data. Used for testing/demo."""
 
     def search(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
-        """Return mock search results."""
+        """Return demo data."""
         return [
             {
                 "title": f"Mock result 1: {query}",

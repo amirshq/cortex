@@ -244,6 +244,17 @@ production and add pricing as models are adopted.
 
 Run all tests: `python -m pytest tests/ -v`
 
+Test settings live in `pytest.ini`. Async controller tests need `pytest-asyncio`
+(pinned in `requirements.txt`); `asyncio_mode = strict` there means every async
+test must carry `@pytest.mark.asyncio`. Deprecation warnings raised from `src.*`
+are configured to fail the run, so a new Pydantic/stdlib deprecation shows up as
+a test failure rather than scrolling past in the warnings summary.
+
+Note: the checked-out `.venv/` is Python 3.9 and predates the current pins
+(`docling==2.87.0` needs Python >= 3.10 and cannot install there). The pinned
+requirements are satisfied by the Python 3.11 interpreter on PATH — run the
+suite with that, or rebuild `.venv` on 3.11.
+
 Example queries to test live data integration:
 - "What's in the news today?"
 - "Tell me about recent AI developments"

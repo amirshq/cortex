@@ -9,7 +9,7 @@ At this point, the reranker has been tested to ensure it behaves correctly under
     Separated policy from ML
     Made behavior testable and explicit
 """
-from src.business.rag.orchestrator import select_context
+from src.business.rag.re_ranker.orchestrator import select_context
 from src.business.rag.re_ranker.config import ReRankerConfig
 from src.business.rag.re_ranker.re_ranker import ReRanker
 from src.business.rag.re_ranker.interface import RetrievedChunk, ReRankedChunk, ReRankScorer
