@@ -246,3 +246,6 @@ src/ui/node_modules/
 # Vite / build cache
 .vite/
 dist/
+# Any env variant (e.g. .env2) holds real credentials. Keep a template tracked.
+.env*
+!.env.example

@@ -232,17 +232,64 @@ production and add pricing as models are adopted.
 
 ## Testing
 
-**Comprehensive test coverage** (run with `pytest` in venv):
+The suite has **two tiers**. `pytest` runs only the first.
 
-- `tests/api/test_ratelimiter.py` — token-bucket rate limiter (initialization, consumption, refill, concurrency)
-- `tests/api/test_controller.py` — HTTP controllers (send_message, get_history, query, upload)
-- `tests/business/core/test_model.py` — LLM factory and implementations (OpenAI, Azure, HuggingFace)
+### Tier 1 — unit tests (477, hermetic)
+
+No network, no API keys, no GPU, ~14s. Every external service is faked via
+fixtures in `tests/conftest.py` (`FakeEmbedder`, `FakeConversationVectorStore`,
+`FakeRedisMemory`, `FakeOpenAIClient`).
+
+- `tests/api/test_ratelimiter.py` — token-bucket limiter (init, consumption, refill, concurrency)
+- `tests/api/test_controller.py` — controllers (send_message, get_history, query, upload)
+- `tests/api/test_controller_sessions.py` — list/delete session endpoints
+- `tests/business/chatbot/test_agentic_chatbot.py` — **tool dispatch, the ReAct loop, the 3-way persistence fan-out, provider guards**
+- `tests/business/core/test_model.py` — LLM factory and implementations
 - `tests/business/core/test_embedding.py` — embedding providers and factory
-- `tests/business/core/test_cost.py` — cost calculation for LLM and embedding API calls
-- `tests/business/core/test_live_data.py` — live data providers (mock, DuckDuckGo, NewsAPI)
-- `tests/business/rag/` — retrieval, re-ranker, orchestrator (existing tests)
+- `tests/business/core/test_cost.py` — LLM/embedding cost calculation
+- `tests/business/core/test_live_data.py` — live data providers
+- `tests/business/core/test_prompt_builder.py` — both prompt builders, incl. the grounding rules and date injection
+- `tests/business/rag/test_retrieval.py` — RAGPipeline retrieve → rerank → generate
+- `tests/business/rag/test_rag_entrypoints.py` — query_rag / ingest_pdfs + retrieval-quality metrics
+- `tests/business/rag/test_vector_store.py` — Chroma + Azure Search, incl. **the Azure→Chroma response-shape translation**
+- `tests/business/rag/test_ingestion.py` — Chunker, chunk-id stability, table-section tagging, build_index batching
+- `tests/business/rag/` — re-ranker and orchestrator (pre-existing)
+- `tests/memory/` — RedisMemory, LongTermMemory, ChatHistoryManager, ResponseCache, ChromaVectorDB
 
-Run all tests: `python -m pytest tests/ -v`
+```bash
+python -m pytest tests/ -v
+```
+
+### Tier 2 — evaluations (35, marked `eval`, deselected by default)
+
+Real models, real cost, non-deterministic. These answer questions unit tests
+structurally cannot: *is the right chunk retrieved, does the system refuse what
+it doesn't know, and where does the latency go*.
+
+```bash
+pytest -m eval -v -s      # -s matters: each test prints its measured metric
+```
+
+- `tests/evals/test_retrieval_quality.py` — recall@1/@3, MRR, re-ranker lift, gate behaviour, embedding sanity
+- `tests/evals/test_hallucination.py` — groundedness, refusal rate on unanswerable questions, LLM-as-judge (with a calibration test for the judge itself)
+- `tests/evals/test_latency.py` — per-stage p50/p95 with attribution
+
+The corpus (`tests/evals/data/golden_set.json`) describes a **fictional**
+company on purpose: if the model can answer without retrieval, it is
+fabricating. Extend the JSON, not the test code. See `tests/evals/README.md`.
+
+Thresholds are regression floors set *below* measured performance, not targets.
+
+Measured on 2026-09-09: recall@1 1.000, MRR 1.000, grounded accuracy 1.000,
+refusal rate 1.000, judged groundedness 1.000, end-to-end RAG p95 2.87s
+(generate 63%, retrieve 18%, rerank 18%).
+
+**Known finding pinned by `TestRerankerGate`**: `CrossEncoderReRanker` emits raw
+logits (~±10), but `ReRankerConfig.min_score=0.15` reads as a 0-1 relevance
+threshold — the effective gate is `sigmoid(0.15)≈0.54`. One golden query has its
+correct chunk gated out entirely; the `hybrid` fallback recovers it and marks the
+query low-confidence, so answers stay correct, but precision gating degrades to
+all-or-nothing. Fixing the scale should break those tests deliberately.
 
 Test settings live in `pytest.ini`. Async controller tests need `pytest-asyncio`
 (pinned in `requirements.txt`); `asyncio_mode = strict` there means every async
