@@ -175,9 +175,9 @@ Icon
 Network Trash Folder
 Temporary Items
 .apdisk
-data/rag_uploads/
-data/rag_vectorstore/
-data/library/
+**/data/rag_uploads/
+**/data/rag_vectorstore/
+**/data/library/
 
 # Windows
 Thumbs.db
@@ -239,9 +239,9 @@ htmlcov/
 
 # Node / frontend
 node_modules/
-src/ui/dist/
-src/ui/.vite/
-src/ui/node_modules/
+**/src/ui/dist/
+**/src/ui/.vite/
+**/src/ui/node_modules/
 
 # Vite / build cache
 .vite/
