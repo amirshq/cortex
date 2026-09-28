@@ -1,0 +1,97 @@
+{
+  "_comment": [
+    "Golden evaluation corpus for retrieval-quality and hallucination tests.",
+    "",
+    "Every entity here is FICTIONAL on purpose. If the model can answer a",
+    "question about Veldrin Corp from its own weights, the answer is a",
+    "hallucination by construction — there is no real-world fact to recall.",
+    "That is what makes the groundedness assertions meaningful; a corpus of",
+    "real facts cannot distinguish retrieval from memorisation.",
+    "",
+    "Extend this file rather than the test code when adding cases."
+  ],
+  "documents": [
+    {
+      "id": "veldrin-overview",
+      "text": "Veldrin Corp was founded in 2019 by Marta Okonkwo and Priya Raghunathan in Halifax, Nova Scotia. The company builds industrial humidity sensors for cold-chain logistics. As of the 2024 annual report, Veldrin employs 412 people across three offices: Halifax, Rotterdam, and Busan. The company's flagship product is the Kestrel-7 sensor array."
+    },
+    {
+      "id": "kestrel-specs",
+      "text": "The Kestrel-7 sensor array operates in a temperature range of minus 40 to plus 65 degrees Celsius. It reports humidity with an accuracy of plus or minus 0.8 percent relative humidity. Battery life is rated at 26 months under normal duty cycle. The device transmits over LoRaWAN at 915 megahertz in North America and 868 megahertz in Europe. Each unit weighs 340 grams."
+    },
+    {
+      "id": "veldrin-financials",
+      "text": "Veldrin Corp reported revenue of 87.4 million Canadian dollars in fiscal year 2024, up from 61.2 million in fiscal 2023. Gross margin was 58 percent. The company reached operating profitability in the third quarter of 2024 for the first time. Research and development spending was 14.1 million dollars, representing 16 percent of revenue."
+    },
+    {
+      "id": "veldrin-support",
+      "text": "Veldrin Corp warranty terms cover the Kestrel-7 for 36 months from date of shipment. Warranty claims must be filed through the partner portal within 30 days of failure. Field replacement units ship within 5 business days to addresses in Canada, the Netherlands, and South Korea. Calibration services are billed separately at 240 dollars per unit."
+    },
+    {
+      "id": "distractor-weather",
+      "text": "Relative humidity is the ratio of the partial pressure of water vapour to the equilibrium vapour pressure of water at a given temperature. Cold air holds less moisture than warm air. Condensation occurs when air is cooled below its dew point. Hygrometers are the general class of instrument used to measure atmospheric humidity."
+    }
+  ],
+  "retrieval_cases": [
+    {
+      "question": "What temperature range does the Kestrel-7 operate in?",
+      "relevant_doc_ids": ["kestrel-specs"]
+    },
+    {
+      "question": "How many people does Veldrin employ?",
+      "relevant_doc_ids": ["veldrin-overview"]
+    },
+    {
+      "question": "What was Veldrin's revenue in fiscal 2024?",
+      "relevant_doc_ids": ["veldrin-financials"]
+    },
+    {
+      "question": "How long is the Kestrel-7 warranty?",
+      "relevant_doc_ids": ["veldrin-support"]
+    },
+    {
+      "question": "Who founded Veldrin Corp and where?",
+      "relevant_doc_ids": ["veldrin-overview"]
+    },
+    {
+      "question": "What radio frequency does the sensor use in Europe?",
+      "relevant_doc_ids": ["kestrel-specs"]
+    }
+  ],
+  "grounded_cases": [
+    {
+      "question": "What temperature range does the Kestrel-7 operate in?",
+      "must_contain_any": ["-40", "minus 40", "65"]
+    },
+    {
+      "question": "How many people does Veldrin employ?",
+      "must_contain_any": ["412"]
+    },
+    {
+      "question": "What was Veldrin's revenue in fiscal 2024?",
+      "must_contain_any": ["87.4", "87,4"]
+    },
+    {
+      "question": "How long is the Kestrel-7 warranty?",
+      "must_contain_any": ["36"]
+    }
+  ],
+  "unanswerable_cases": [
+    {
+      "question": "What is Veldrin Corp's CEO's home address?",
+      "why": "never stated in the corpus"
+    },
+    {
+      "question": "How many Kestrel-9 units did Veldrin ship in 2025?",
+      "why": "the Kestrel-9 does not exist anywhere in the corpus"
+    },
+    {
+      "question": "What is Veldrin Corp's stock ticker symbol?",
+      "why": "the corpus never says the company is public"
+    },
+    {
+      "question": "What was Veldrin's revenue in fiscal 2026?",
+      "why": "corpus stops at fiscal 2024 — a plausible-looking number is fabrication"
+    }
+  ]
+}
