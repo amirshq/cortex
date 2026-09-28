@@ -1,10 +1,10 @@
 # Cortex test suite — what is tested and what is measured
 
-512 tests in two tiers. `pytest` runs the first tier only.
+664 tests in two tiers. `pytest` runs the first tier only.
 
 | Tier | Count | Cost | Deterministic? | Command |
 |---|---|---|---|---|
-| 1 — unit tests | 477 | free, ~14s | yes | `pytest` |
+| 1 — default run (unit + API integration + API E2E) | 629 (619 pass, 10 known-bug xfails) | free, ~19s | yes | `pytest` |
 | 2 — evaluations | 35 | real API calls, minutes | no | `pytest -m eval -v -s` |
 
 The split is enforced in `pytest.ini` via `addopts = -m "not eval"`. Tier 1 is
@@ -16,10 +16,13 @@ Two `pytest.ini` settings are worth knowing before you add a test:
 - `asyncio_mode = strict` — every async test must carry `@pytest.mark.asyncio`.
 - `filterwarnings = error::DeprecationWarning:src.*` — a deprecation raised from
   our own code fails the run instead of scrolling past in the warnings summary.
+- `markers` — `integration` and `e2e` select the API's HTTP-level suites
+  (`pytest -m integration`, `pytest -m e2e`). Both are hermetic and part of the
+  default run; the markers exist for selection, not exclusion.
 
 ---
 
-## Tier 1 — unit tests (477)
+## Tier 1 — default run (629)
 
 ### API layer
 
@@ -58,6 +61,150 @@ against real SQLite in `tests/memory/test_chat_history_manager.py`.
 rejected *before* the database is touched; an unknown session, or one belonging
 to another user, returns 404 (not 403 — no existence leak); storage errors
 become 500; validation 400s and 404s are not collapsed into 500s.
+
+#### `tests/api/test_controller_branches.py` — 12 tests
+
+The three controller paths the tests above never executed (branch coverage
+found them). Brings `controller.py` to 100% statement and branch coverage.
+
+**What it asserts:** when the business layer reports input/output tokens,
+`calculate_chat_cost` is called with the model, both counts and the normalised
+`LLM_PROVIDER`; a positive cost lands in `chat_cost_total{model}` and a zero cost
+is not recorded; either token count alone triggers costing; with no counts —
+the shape `process_chat_message` actually returns today — costing is skipped. A
+prebuilt `ChatMessageResponse` from the business layer is returned unchanged. A
+4xx `HTTPException` raised during PDF ingestion keeps its status and detail
+instead of becoming a 500, and records no indexing metrics.
+
+**Note:** the cost branch is unreachable in production today, because
+`process_chat_message` never returns token counts. The tests pin the
+controller's side so costing works once the counts are wired through.
+
+#### `tests/api/test_api_test_harness.py` — 6 tests
+
+Guards the guards. If an edit to `tests/api/conftest.py` silently disabled an
+autouse fixture, every other test would still pass while reaching the network
+or the real `data/` directory. **What it asserts:** outbound connections and
+external DNS lookups raise; credentials are dummies; `LIVE_DATA_PROVIDER` and
+`SQLITE_DB_PATH` are pinned; `_PROJECT_ROOT` and `ChatHistoryManager` point into
+`tmp_path`; each test starts with a full rate-limit bucket.
+
+#### `tests/api/conftest.py` — the API test harness (autouse, applies to every test under `tests/api/`)
+
+- **Dummy credentials, not deleted ones.** `load_dotenv()` never overrides a
+  variable that is already set, and `AgenticChatbot.__init__` calls it on every
+  chat request — so deleting a key lets `.env` put the real one straight back.
+  Every credential is set to `test-dummy-…` instead, and providers are pinned to
+  local values (`LIVE_DATA_PROVIDER=mock`).
+- **Socket guard.** Non-loopback `connect()` and DNS lookups raise. `TestClient`
+  drives the app in-process and opens no sockets, so this only fires on a
+  missed mock.
+- **Sandboxed paths.** `_PROJECT_ROOT` (controller, chatbot and RAG packages)
+  and `ChatHistoryManager` are redirected into `tmp_path`. Upload deletes every
+  PDF in `data/rag_uploads`, `ingest_pdfs` resets the RAG index, and the session
+  endpoints open the relative path `data/chatbot.db`. **Before this fixture
+  existed, the upload tests in `test_controller.py` truncated the real
+  `data/rag_uploads/test.pdf` on every run** — they patch `Path.mkdir` but not
+  `dest.open("wb")`.
+- **Fresh rate-limit bucket per test**, copying the production capacity and
+  refill rate, so tests don't depend on run order.
+- Opt-in: `client` (`TestClient(app, raise_server_exceptions=False)` so an
+  unhandled error returns the 500 a real client would see), `fake_clock`
+  (patches the `time` name inside `src.api.ratelimiter` only, never the global
+  `time.time`), and `metric` (reads the process-global Prometheus registry;
+  assert deltas, never absolute values).
+
+### API integration — `tests/api/integration/` (110 tests, marker `integration`)
+
+Real HTTP through the real app: Prometheus middleware → CORS → router →
+rate-limit dependency → controller. Only the business entry points
+(`process_chat_message`, `get_chat_history`, `query_rag`, `ingest_pdfs`) and
+`ChatHistoryManager` are mocked, in `integration/conftest.py`. Brings `router.py`,
+`main.py` and `metrics.py` from 0–53% to 100%.
+
+#### `test_http_routes.py` — 28 tests
+
+Each of the six `/api/v1` operations: body, query and path parameters bind into
+the right DTO (including URL-decoded session ids and the int→string `user_id`
+conversion storage needs); response bodies match their response models, with
+storage-only fields filtered out; unknown body fields are ignored. The OpenAPI
+schema lists exactly the six versioned operations; none exist without the
+prefix (404); wrong methods are 405; unknown routes are 404.
+
+#### `test_http_validation.py` — 37 tests (3 known-bug xfails)
+
+Which layer rejects what. **FastAPI → 422:** missing, null or wrong-typed fields,
+malformed JSON, a JSON array body, a missing `user_id` query parameter, an upload
+with no file part — none reach the business layer. **Controller → 400:** blank
+message or question, `user_id <= 0`, a blank session id, a non-PDF upload —
+rejected before storage is opened or anything is written. **Error mapping:** a
+403 from the business layer passes through; an unknown session is 404; a
+`ValueError` on the chat path is 400; every endpoint maps an unexpected failure
+to 500 with its own detail prefix.
+
+#### `test_http_rate_limit.py` — 14 tests
+
+The limiter as a client sees it, on a fake clock (no sleeps). A request spends
+exactly one token through the dependency; the request after capacity gets 429
+with `"Rate limit exceeded. Please slow down."` and never reaches the
+controller; each rejection increments `rate_limit_rejections_total` and allowed
+requests don't; one refill interval restores exactly one request, half an
+interval restores none, a long idle refills only to capacity.
+
+Two classes document **current design** rather than a contract (see *Design
+notes* below): the bucket is attached only to `POST /chat` and shared by every
+caller, and a request FastAPI rejects as 422 has already spent a token.
+
+#### `test_http_metrics_middleware.py` — 10 tests (2 known-bug xfails)
+
+`http_requests_total` increments once with method, path and status;
+`http_request_duration_seconds` observes once; `http_requests_in_progress` is
+exactly one higher *during* the request (read from inside the handler) and back
+to baseline after. Handled 400s, controller 500s and an unhandled exception that
+propagates through `call_next` are all counted with the right status, and the
+gauge recovers. `/metrics` scrapes are not counted.
+
+#### `test_http_app_shell.py` — 21 tests
+
+`/` and `/health` bodies; `/health` is never rate limited; `/metrics` serves the
+Prometheus text format, exposes all 14 Cortex metric families (one parametrised
+test each, so a missing family is named), and reflects traffic that just
+happened. CORS: a preflight from the Vite dev origin (`http://localhost:5173`)
+is allowed for `POST`.
+
+### API end-to-end — `tests/api/e2e/` (24 tests, marker `e2e`)
+
+Real HTTP through the real app **and** the real business wiring. Only external
+services are faked (`e2e/conftest.py`): the OpenAI client, the embedder, Redis
+and the Chroma conversation store for chat; `RAGPipeline` and the vector store /
+index builder behind `ingest_pdfs` for RAG. SQLite is real, in `tmp_path`. The
+RAG boundary sits at `RAGPipeline` because the real cross-encoder needs torch, a
+model download and ~1s per request; retrieval quality is measured in Tier 2.
+
+#### `test_chat_workflow_e2e.py` — 13 tests (4 known-bug xfails)
+
+**Session lifecycle:** `POST /chat` → `GET /history` shows both messages →
+`GET /sessions` lists the session titled with the first message → `DELETE` →
+both are empty. Follow-up turns join the session, keep its title, and the earlier
+turn is sent to the model. **Memory fan-out:** one turn lands in Redis, the
+vector store and SQLite; a second session recalls it through the agent's
+`search_vector_db` tool, and the tool result reaches the model. **Ownership:**
+another user's delete is 404 and the session is still listed; sessions are
+listed per user. **Rejected requests leave no trace:** a 429, a 422, a 400 and a
+model failure (500) each reach neither storage nor, where applicable, the model.
+
+#### `test_rag_workflow_e2e.py` — 11 tests (1 known-bug xfail)
+
+**Query:** a reranked answer returns sources trimmed to 400 characters and
+scored by `rerank_score`, and records `rag_queries_total` +
+`rag_retrieval_top_score`; a gated fallback is scored by vector distance and
+counted as low confidence; no context still answers and counts as low
+confidence; the pipeline opens its index inside the sandbox; a pipeline failure
+is a 500 and not counted as a query. **Upload:** a valid PDF is saved, then the
+index is reset and rebuilt from only that PDF, and the indexing counters move; a
+second upload indexes only the new file; a rejected type or empty filename
+touches neither disk nor index; an indexing failure is a 500 with no indexing
+metrics.
 
 ### Chatbot orchestration
 
@@ -613,6 +760,36 @@ which is precisely what the finding below makes currently unanswerable.
 
 ## Known defects pinned by tests
 
+### API known bugs — strict xfail (10 tests)
+
+These tests assert the **correct** behaviour, so they fail today and are marked
+`xfail(strict=True)`. They show as `x` in a normal run. When a bug is fixed its
+test XPASSes, `strict` turns that into a failure, and the marker should be
+removed. Each was confirmed with `--runxfail` to fail on its own assertion, not
+on a fixture error.
+
+| Bug | Test | Measured today |
+|---|---|---|
+| Out-of-range `limit` / `offset` on `GET /history` returns 500, not 422 — the router builds `ChatHistoryRequest` inside the handler | `integration/test_http_validation.py::TestKnownIssueHistoryPaginationRange` (3) | `500 == 422` |
+| The middleware labels metrics by raw path: every session id and every unmatched URL becomes a new time series | `integration/test_http_metrics_middleware.py::TestKnownIssuePathLabelCardinality` (2) | 21 samples carry the probe id |
+| `POST /chat` without `session_id` returns `session_id: null`, though the turn was stored under `str(user_id)` | `e2e/test_chat_workflow_e2e.py::TestKnownIssues::test_response_names_the_session_the_server_used` | `None == '7'` |
+| `GET /history` filters by session id only — any `user_id` reads any session | `…::test_history_is_scoped_to_the_session_owner` | user 8 read 2 of user 7's messages |
+| Another user's rejected `DELETE` (404) still wipes the owner's messages — defect 1 below, now caught over HTTP | `…::test_a_rejected_delete_by_another_user_leaves_the_owners_messages` | owner's history total `0` |
+| `DELETE /sessions` removes SQLite rows only; the turns stay in Redis and the conversation vector store and remain recallable | `…::test_deleting_a_session_removes_its_turns_from_every_memory_tier` | session still in Redis |
+| A failed upload has already deleted the previous PDFs and reset the index, leaving nothing indexed | `e2e/test_rag_workflow_e2e.py::TestKnownIssueFailedUploadDestroysExistingContent` | index `[]` |
+
+### Design notes (current behaviour, documented, not asserted as correct)
+
+- **Malformed requests spend rate-limit tokens.** FastAPI resolves the
+  `_check_rate_limit` dependency before validating the body, so ten malformed
+  `POST /chat` requests (422) exhaust the bucket and the next valid request gets
+  429.
+- **One bucket, one route.** The limiter is a single module-level bucket shared
+  by every caller, attached only to `POST /chat`. `/rag/query` also calls the LLM
+  and is unlimited.
+
+### Older pinned defects
+
 Two tests assert **current wrong behaviour on purpose**, so the defect is
 visible in CI rather than discovered in production. Both say so in their
 docstring, and both should be rewritten when the underlying code is fixed.
@@ -674,6 +851,10 @@ Nothing here talks to a real service.
 
 `conftest.py` also centralises the `sys.path` bootstrap that older test files did
 by hand, and provides `tmp_db_path` for the SQLite tests.
+
+The API tests add their own harness in `tests/api/conftest.py` (dummy
+credentials, socket guard, sandboxed paths, fresh rate-limit bucket, `client`,
+`fake_clock`, `metric`) — described under *Tier 1 → API layer*.
 
 ---
 

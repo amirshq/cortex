@@ -68,7 +68,7 @@ src/
     rag/          PDF ingestion, chunking, vector_store.py, retrieval.py, re_ranker/.
   database/
     dto.py        Pydantic request/response models (source of truth for API contracts).
-    database.py   SQLAlchemy setup — currently EMPTY, not yet implemented.
+    database.py   my setup — currentlySQLAlche EMPTY, not yet implemented.
   memory/
     redis_memory.py       Short-term memory (Redis lists, TTL).
     long_term_memory.py   Longer-term memory.
