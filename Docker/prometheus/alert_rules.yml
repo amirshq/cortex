@@ -7,7 +7,7 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "Personal chatbot API is down"
+          summary: "Cortex API is down"
           description: "Prometheus has not been able to scrape {{ $labels.instance }} (job {{ $labels.job }}) for 1 minute."
 
       - alert: PrometheusTargetMissing
@@ -31,7 +31,7 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "High 5xx error rate on the chatbot API"
+          summary: "High 5xx error rate on the Cortex API"
           description: "More than 5% of HTTP requests have returned 5xx over the last 5 minutes (current: {{ $value | humanizePercentage }})."
 
       - alert: APIHighLatencyP95

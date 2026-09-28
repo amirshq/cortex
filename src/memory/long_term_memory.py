@@ -5,21 +5,21 @@ from datetime import datetime
 
 # Type checking only - avoids circular imports
 if TYPE_CHECKING:
-    from src.memory.vectordb import VectorDB
+    from src.memory.vectordb import ConversationVectorStoreBase
 
 
 class LongTermMemory:
     """
     Cognitive long-term memory layer.
     Owns memory semantics, not storage.
-    
-    Uses dependency injection - vectordb, embedder, and chunker are passed in,not imported. 
+
+    Uses dependency injection - vectordb, embedder, and chunker are passed in,not imported.
     This makes the code more flexible and testable.
     """
 
     def __init__(
-        self, 
-        vectordb: "VectorDB",  # Type hint (string to avoid circular import)
+        self,
+        vectordb: "ConversationVectorStoreBase",  # Type hint (string to avoid circular import)
         embedder,  # Object with embed() method
         chunker,   # Object with split() method
     ):

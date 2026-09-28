@@ -88,9 +88,9 @@ class RedisMemory(ShortTermMemoryBase):
 # to today's behavior — on-prem/local deployments don't need to set anything.
 #
 #   redis        (default) — local/self-hosted Redis (REDIS_URL).
-#   azure_redis  — Azure Cache for Redis. Not implemented yet (it's Redis
-#                  protocol-compatible, so this will likely just point
-#                  RedisMemory at a rediss:// URL with TLS once it lands).
+#   azure_redis  — Azure Cache for Redis. It's Redis protocol-compatible, so
+#                  this reuses RedisMemory unchanged — just points it at a
+#                  rediss:// (TLS) URL instead (AZURE_REDIS_CONNECTION_STRING).
 
 def create_memory(
     url: Optional[str] = None,
@@ -105,11 +105,20 @@ def create_memory(
         return RedisMemory(url=resolved_url, ttl_seconds=ttl_seconds)
 
     if provider == "azure_redis":
-        raise NotImplementedError(
-            "MEMORY_PROVIDER=azure_redis is not implemented yet. Use 'redis' for now."
-        )
+        connection_string = url or os.getenv("AZURE_REDIS_CONNECTION_STRING")
+        if not connection_string:
+            raise RuntimeError(
+                "MEMORY_PROVIDER=azure_redis requires AZURE_REDIS_CONNECTION_STRING "
+                "— a rediss://:<access-key>@<name>.redis.cache.windows.net:6380/0 URL "
+                "(host + access key from the Azure portal's 'Access keys' blade)."
+            )
+        if not connection_string.startswith("rediss://"):
+            raise RuntimeError(
+                "AZURE_REDIS_CONNECTION_STRING must use the rediss:// scheme (TLS) — "
+                "Azure Cache for Redis requires SSL by default (port 6380)."
+            )
+        return RedisMemory(url=connection_string, ttl_seconds=ttl_seconds)
 
     raise ValueError(
-        f"Unknown MEMORY_PROVIDER={provider!r}. Supported: redis, "
-        "azure_redis (coming soon)."
+        f"Unknown MEMORY_PROVIDER={provider!r}. Supported: redis, azure_redis."
     )

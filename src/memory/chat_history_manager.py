@@ -87,6 +87,18 @@ class ChatHistoryManager:
                 (title, session_id),
             )
 
+    def delete_session(self, session_id: str, user_id: str) -> bool:
+        """Delete a session and all its messages. Returns True if deleted, False if not found."""
+        with self._connect() as conn:
+            # Delete messages first (due to foreign key)
+            conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+            # Delete session
+            cursor = conn.execute(
+                "DELETE FROM sessions WHERE id = ? AND user_id = ?",
+                (session_id, user_id),
+            )
+            return cursor.rowcount > 0
+
     def list_sessions(self, user_id: str) -> List[Dict]:
         with self._connect() as conn:
             rows = conn.execute(

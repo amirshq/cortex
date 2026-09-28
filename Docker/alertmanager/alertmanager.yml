@@ -1,4 +1,4 @@
-# Alertmanager configuration for the personal-chatbot monitoring stack.
+# Alertmanager configuration for the Cortex (personal-chatbot) monitoring stack.
 #
 # This ships with NO notification channel configured — alerts are grouped and
 # de-duplicated but not delivered anywhere. Firing/resolved alerts are still

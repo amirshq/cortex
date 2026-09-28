@@ -21,7 +21,7 @@ we still need DTOs to:
 
 
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, List
 from datetime import datetime
 
@@ -41,8 +41,8 @@ class ChatMessageRequest(BaseModel):
     session_id: Optional[str] = Field(None, description="Chat session identifier")
     context: Optional[dict] = Field(None, description="Additional context/metadata")
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "message": "What's the weather like today?",
                 "user_id": 1,
@@ -50,6 +50,7 @@ class ChatMessageRequest(BaseModel):
                 "context": {"timezone": "UTC"}
             }
         }
+    )
 
 
 class ChatMessageResponse(BaseModel):
@@ -65,8 +66,8 @@ class ChatMessageResponse(BaseModel):
     model_used: Optional[str] = Field(None, description="LLM model identifier")
     tokens_used: Optional[int] = Field(None, description="Token count for this response")
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "reply": "The weather is sunny and 72°F today.",
                 "session_id": "abc123",
@@ -75,6 +76,7 @@ class ChatMessageResponse(BaseModel):
                 "tokens_used": 45
             }
         }
+    )
 
 
 class ChatHistoryRequest(BaseModel):
@@ -92,6 +94,24 @@ class ChatHistoryResponse(BaseModel):
     messages: List[dict] = Field(..., description="List of message objects")
     total: int = Field(..., description="Total number of messages")
     session_id: Optional[str] = None
+
+
+class SessionInfo(BaseModel):
+    """Session metadata returned in list."""
+    id: str
+    title: str
+    created_at: str
+
+
+class ListSessionsResponse(BaseModel):
+    """DTO for listing user sessions."""
+    sessions: List[SessionInfo] = Field(..., description="List of user sessions")
+
+
+class DeleteSessionResponse(BaseModel):
+    """DTO for session deletion response."""
+    success: bool
+    message: str = "Session deleted successfully"
 
 
 # Alternative: If you want to support multiple input formats, use discriminated unions
@@ -152,10 +172,11 @@ class RAGQueryRequest(BaseModel):
     """Request DTO for RAG pipeline queries."""
     question: str = Field(..., description="Natural-language question to answer from uploaded PDFs")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {"question": "What are the main findings in the document?"}
         }
+    )
 
 
 class RAGQueryResponse(BaseModel):
@@ -163,13 +184,14 @@ class RAGQueryResponse(BaseModel):
     answer: str = Field(..., description="Generated answer from the RAG pipeline")
     sources: List[dict] = Field(default_factory=list, description="Relevant source chunks used")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "answer": "The main findings are...",
                 "sources": [{"text": "...", "metadata": {}, "score": 0.87}],
             }
         }
+    )
 
 
 class RAGUploadResponse(BaseModel):

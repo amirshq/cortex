@@ -1,4 +1,4 @@
-"""Prometheus metrics for the personal chatbot API.
+"""Prometheus metrics for the Cortex API.
 
 Exposes generic HTTP instrumentation (via `prometheus_middleware`) plus a few
 business-level counters that controllers update directly. Scraped by Prometheus
@@ -43,6 +43,19 @@ CHAT_TOKENS_TOTAL = Counter(
     "chat_tokens_total",
     "Tokens consumed by chat completions, per LLM model",
     ["model"],
+)
+CHAT_COST_TOTAL = Counter(
+    "chat_cost_total",
+    "USD cost of chat completions, per LLM model",
+    ["model"],
+)
+EMBEDDING_REQUESTS_TOTAL = Counter(
+    "embedding_requests_total",
+    "Embedding API calls made",
+)
+EMBEDDING_COST_TOTAL = Counter(
+    "embedding_cost_total",
+    "USD cost of embedding API calls",
 )
 RAG_DOCUMENTS_INDEXED_TOTAL = Counter(
     "rag_documents_indexed_total",

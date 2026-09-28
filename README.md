@@ -1,4 +1,6 @@
-# Personal Chatbot
+# Cortex
+
+> **Note:** This project is named "Cortex" (the application). The GitHub repository is currently named "personal-chatbot" and can be renamed following [this guide](CLAUDE.md#renaming-the-repository) if desired.
 
 A personal assistant chatbot built with **FastAPI** (layered/clean architecture backend), an
 **LLM** (OpenAI and/or Hugging Face, switchable), a **RAG pipeline** over your own PDFs, and a

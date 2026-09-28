@@ -33,8 +33,16 @@ class OpenAIEmbedder(Embedder):
     Uses text-embedding-3-small by default (fast, 1536 dims).
     """
 
-    def __init__(self, api_key: str, model: str = "text-embedding-3-small"):
-        self.client = OpenAI(api_key=api_key)
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: str = "text-embedding-3-small",
+        client: Optional[OpenAI] = None,
+    ):
+        # `client` lets callers (e.g. the Azure branch of create_embedder())
+        # inject a pre-built AzureOpenAI client — it's duck-type compatible
+        # since only .embeddings.create() is ever called on it.
+        self.client = client or OpenAI(api_key=api_key)
         self.model = model
 
     def _embed(self, inputs: List[str], max_retries: int = 5) -> List[List[float]]:
@@ -68,7 +76,9 @@ class OpenAIEmbedder(Embedder):
 # to today's behavior — on-prem/local deployments don't need to set anything.
 #
 #   openai        (default) — OpenAI's cloud embeddings API.
-#   azure_openai  — Azure OpenAI Service embeddings. Not implemented yet.
+#   azure_openai  — Azure OpenAI Service embeddings. Requires
+#                   AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY,
+#                   AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME (see .env).
 
 def create_embedder(
     provider: Optional[str] = None,
@@ -86,11 +96,17 @@ def create_embedder(
         return OpenAIEmbedder(api_key=resolved_key, model=model or "text-embedding-3-small")
 
     if provider == "azure_openai":
-        raise NotImplementedError(
-            "EMBEDDING_PROVIDER=azure_openai is not implemented yet. Use 'openai' for now."
-        )
+        from .model import build_azure_openai_client
+
+        deployment = model or os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME")
+        if not deployment:
+            raise RuntimeError(
+                "EMBEDDING_PROVIDER=azure_openai requires "
+                "AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME (the deployment name you "
+                "gave the embedding model in Azure — not the underlying model name)."
+            )
+        return OpenAIEmbedder(client=build_azure_openai_client(api_key), model=deployment)
 
     raise ValueError(
-        f"Unknown EMBEDDING_PROVIDER={provider!r}. Supported: openai, "
-        "azure_openai (coming soon)."
+        f"Unknown EMBEDDING_PROVIDER={provider!r}. Supported: openai, azure_openai."
     )

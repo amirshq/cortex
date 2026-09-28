@@ -5,7 +5,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from abc import ABC, abstractmethod
 import torch
 from .prompt_builder import PromptBuilder
-from openai import OpenAI
+from openai import OpenAI, AzureOpenAI
 from dotenv import load_dotenv
 from typing import Optional
 load_dotenv()
@@ -120,7 +120,23 @@ class OpenAIModel(BaseLLM):
 #
 #   openai        (default) — OpenAI's cloud API. Current on-prem/as-is setup.
 #   huggingface   — fully local inference, no network calls at generation time.
-#   azure_openai  — Azure OpenAI Service. Not implemented yet.
+#   azure_openai  — Azure OpenAI Service. Requires AZURE_OPENAI_ENDPOINT,
+#                   AZURE_OPENAI_API_KEY, AZURE_OPENAI_CHAT_DEPLOYMENT_NAME
+#                   (see .env for the full list).
+
+def build_azure_openai_client(api_key: Optional[str] = None) -> AzureOpenAI:
+    """Shared AzureOpenAI client builder — used by both create_llm() and any
+    caller that needs a raw client (e.g. the agentic tool-calling loop)."""
+    endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+    resolved_key = api_key or os.getenv("AZURE_OPENAI_API_KEY")
+    api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-21")
+    if not endpoint or not resolved_key:
+        raise RuntimeError(
+            "AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY must be set to use "
+            "an azure_openai provider."
+        )
+    return AzureOpenAI(azure_endpoint=endpoint, api_key=resolved_key, api_version=api_version)
+
 
 def create_llm(
     provider: Optional[str] = None,
@@ -149,12 +165,19 @@ def create_llm(
         )
 
     if provider == "azure_openai":
-        raise NotImplementedError(
-            "LLM_PROVIDER=azure_openai is not implemented yet. Use 'openai' or "
-            "'huggingface' for now."
+        deployment = model_name or os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME")
+        if not deployment:
+            raise RuntimeError(
+                "LLM_PROVIDER=azure_openai requires AZURE_OPENAI_CHAT_DEPLOYMENT_NAME "
+                "(the deployment name you gave the chat model in Azure — not the "
+                "underlying model name)."
+            )
+        return OpenAIModel(
+            client=build_azure_openai_client(api_key),
+            model_name=deployment,
+            system_prompt=system_prompt,
         )
 
     raise ValueError(
-        f"Unknown LLM_PROVIDER={provider!r}. Supported: openai, huggingface, "
-        "azure_openai (coming soon)."
+        f"Unknown LLM_PROVIDER={provider!r}. Supported: openai, huggingface, azure_openai."
     )

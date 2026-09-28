@@ -177,6 +177,7 @@ Temporary Items
 .apdisk
 data/rag_uploads/
 data/rag_vectorstore/
+data/library/
 
 # Windows
 Thumbs.db
@@ -245,3 +246,6 @@ src/ui/node_modules/
 # Vite / build cache
 .vite/
 dist/
+# Any env variant (e.g. .env2) holds real credentials. Keep a template tracked.
+.env*
+!.env.example

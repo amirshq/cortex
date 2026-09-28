@@ -73,6 +73,41 @@ export async function uploadPdf(file) {
 }
 
 /**
+ * List all sessions for a user.
+ * @param {number} userId
+ * @returns {Promise<{sessions: Array}>}
+ */
+export async function listSessions(userId) {
+  const res = await fetch(`${BASE}/sessions?user_id=${userId}`);
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Delete a session.
+ * @param {number} userId
+ * @param {string} sessionId
+ * @returns {Promise<{success: boolean, message: string}>}
+ */
+export async function deleteSession(userId, sessionId) {
+  const res = await fetch(`${BASE}/sessions/${sessionId}?user_id=${userId}`, {
+    method: "DELETE",
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+
+  return res.json();
+}
+
+/**
  * Ask a question using the RAG pipeline.
  * @param {string} question
  * @returns {Promise<{answer: string, sources: Array}>}

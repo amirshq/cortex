@@ -1,10 +1,10 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import ChatWindow from "./components/ChatWindow.jsx";
 import InputBar from "./components/InputBar.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import ModeSelector from "./components/ModeSelector.jsx";
 import RAGPanel from "./components/RAGPanel.jsx";
-import { sendMessage } from "./api/chatApi.js";
+import { sendMessage, listSessions, deleteSession } from "./api/chatApi.js";
 
 const USER_ID = 1;
 
@@ -29,6 +29,29 @@ export default function App() {
   const [isTyping, setIsTyping]   = useState(false);
   const [error, setError]         = useState(null);
 
+  // Load sessions on app startup
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await listSessions(USER_ID);
+        if (data.sessions && data.sessions.length > 0) {
+          // Convert backend sessions to frontend format
+          const loadedSessions = data.sessions.map(s => ({
+            id: s.id,
+            title: s.title,
+            messages: [],
+            createdAt: s.created_at,
+          }));
+          setSessions(loadedSessions);
+          setActiveId(loadedSessions[0].id);
+        }
+      } catch (err) {
+        console.warn("Failed to load sessions:", err);
+        // Fall back to initial session
+      }
+    })();
+  }, []);
+
   const activeSession = sessions.find((s) => s.id === activeId);
 
   // ── helpers ────────────────────────────────────────────────────────────
@@ -50,6 +73,15 @@ export default function App() {
   }, []);
 
   const handleDelete = useCallback((id) => {
+    (async () => {
+      try {
+        await deleteSession(USER_ID, id);
+      } catch (err) {
+        console.warn("Failed to delete session on backend:", err);
+        // Continue with local deletion anyway
+      }
+    })();
+
     setSessions((prev) => {
       const next = prev.filter((s) => s.id !== id);
       if (next.length === 0) {
@@ -117,7 +149,7 @@ export default function App() {
         <div className="header-inner">
           <div className="header-avatar">🤖</div>
           <div className="header-info">
-            <h1>{mode === "rag" ? "RAG · PDF Q&A" : (activeSession?.title || "Personal Chatbot")}</h1>
+            <h1>{mode === "rag" ? "RAG · PDF Q&A" : (activeSession?.title || "Cortex")}</h1>
             <div className="header-status">
               <span className="status-dot" />
               Online

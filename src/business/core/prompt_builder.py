@@ -1,4 +1,5 @@
 from typing import Dict, List, Optional
+from datetime import date
 import yaml
 from pathlib import Path
 
@@ -102,7 +103,16 @@ def build_agentic_system_prompt(
     else:
         snippets = "(no relevant past conversations found)"
 
+    # Without this the model falls back on its training cutoff as "now": it
+    # appends a stale year to web_search queries and then discounts the fresh
+    # results it gets back as implausibly future-dated. Stating the real date
+    # is what makes the web_search tool actually usable.
+    today = date.today().strftime("%A, %d %B %Y")
+
     return f"""You are a helpful, context-aware personal assistant.
+
+Today's date is {today}. Your own training data is older than this, so treat
+anything time-sensitive as something you need to look up rather than recall.
 
 User profile:
 {user_block}
@@ -120,5 +130,12 @@ Instructions:
   as their job, hobbies, interests, preferences, or any personal details.
   Do not skip this step even if the current question seems unrelated to past
   conversations; the user's background often changes what a good answer looks like.
+- Call web_search for anything current: news, recent events, "latest" or
+  "newest" anything, or facts that change over time. Search using the user's
+  own terms — never add a year to the query yourself, as that biases the
+  results toward the wrong period.
+- Results from web_search are more current than your training data. When they
+  conflict, trust the search results and answer from them. If the results are
+  dated later than you expect, they are still correct — do not dismiss them.
 - Be concise and direct. Do not repeat context back to the user verbatim.
 - If you are uncertain, say so rather than inventing information."""

@@ -31,7 +31,11 @@ TABLE_OCR_ENABLED: bool = True
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
-def _rag_persist_dir() -> Path:
+def rag_persist_dir() -> Path:
+    """Resolve the RAG vector-store location. Public (no leading underscore)
+    because scripts/index_cli.py imports it too — the CLI and the API must
+    always agree on where the index lives, or CLI-indexed content becomes
+    invisible to /api/v1/rag/query and vice versa."""
     cfg = load_config()
     dirs = cfg.get("directories", {})
     path = _PROJECT_ROOT / dirs.get("rag_vectorstore_dir", "data/rag_vectorstore")
@@ -48,7 +52,7 @@ def _rag_uploads_dir() -> Path:
 
 
 def _make_pipeline() -> RAGPipeline:
-    return RAGPipeline(persist_dir=str(_rag_persist_dir()))
+    return RAGPipeline(persist_dir=str(rag_persist_dir()))
 
 
 async def query_rag(question: str) -> Dict:
@@ -85,7 +89,7 @@ async def ingest_pdfs(uploads_dir: Path) -> Dict:
     The collection is reset first so stale chunks from previous uploads
     are removed before the new PDF is indexed.
     """
-    persist_dir = _rag_persist_dir()
+    persist_dir = rag_persist_dir()
 
     # Wipe old chunks — upsert never deletes, so stale content from previous
     # uploads would otherwise persist and pollute query results.
