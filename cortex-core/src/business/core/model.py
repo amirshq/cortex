@@ -8,6 +8,7 @@ from .prompt_builder import PromptBuilder
 from openai import OpenAI, AzureOpenAI
 from dotenv import load_dotenv
 from typing import Optional
+from src.utils.config import model_settings
 load_dotenv()
 
 # Base LLM Interface
@@ -141,12 +142,22 @@ def build_azure_openai_client(api_key: Optional[str] = None) -> AzureOpenAI:
 def create_llm(
     provider: Optional[str] = None,
     *,
+    role: str = "rag",
     model_name: Optional[str] = None,
     system_prompt: str = "",
     api_key: Optional[str] = None,
 ) -> BaseLLM:
-    """Factory for the chat LLM, selected by LLM_PROVIDER or the `provider` arg."""
+    """Factory for the chat LLM, selected by LLM_PROVIDER or the `provider` arg.
+
+    role: which entry of config.yml's `models:` supplies the model name and
+    sampling settings. This factory backs the RAG path, so it defaults to "rag".
+    An explicit model_name overrides the config.
+    """
     provider = (provider or os.getenv("LLM_PROVIDER", "openai")).strip().lower()
+    settings = model_settings(role)
+    # Only pass the sampling settings the config actually sets; OpenAIModel's
+    # own defaults apply otherwise.
+    sampling = {k: settings[k] for k in ("temperature", "max_tokens") if k in settings}
 
     if provider == "openai":
         resolved_key = api_key or os.getenv("OPENAI_API_KEY")
@@ -154,13 +165,22 @@ def create_llm(
             raise RuntimeError("OPENAI_API_KEY must be set for LLM_PROVIDER=openai")
         return OpenAIModel(
             client=OpenAI(api_key=resolved_key),
-            model_name=model_name or os.getenv("OPENAI_MODEL_NAME", "gpt-4o"),
+            model_name=model_name or settings["name"],
             system_prompt=system_prompt,
+            **sampling,
         )
 
     if provider == "huggingface":
+        # config.yml's names are OpenAI models, so the local model comes from
+        # .env — there is no sensible default to fall back to.
+        hf_model = model_name or os.getenv("HF_MODEL_NAME")
+        if not hf_model:
+            raise RuntimeError(
+                "LLM_PROVIDER=huggingface requires HF_MODEL_NAME (a Hugging Face "
+                "model id, e.g. 'mistralai/Mistral-7B-Instruct-v0.2')."
+            )
         return LocalHFModel(
-            model_name=model_name or os.getenv("HF_MODEL_NAME", "mistral-7b-instruct-v0.1"),
+            model_name=hf_model,
             system_prompt=system_prompt,
         )
 
@@ -176,6 +196,7 @@ def create_llm(
             client=build_azure_openai_client(api_key),
             model_name=deployment,
             system_prompt=system_prompt,
+            **sampling,
         )
 
     raise ValueError(

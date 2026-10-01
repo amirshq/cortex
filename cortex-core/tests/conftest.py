@@ -167,6 +167,33 @@ def fake_conversation_store() -> FakeConversationVectorStore:
 
 
 @pytest.fixture
+def override_config(monkeypatch, tmp_path):
+    """Run a test against a modified copy of the real config.yml.
+
+        override_config({"models": {"chat": {"name": "gpt-x"}}})
+
+    Sections are merged one level deep into the real file, so everything not
+    mentioned keeps its production value.
+    """
+    import yaml
+
+    import src.utils.config as config_module
+
+    def apply(overrides: Dict[str, Any]) -> None:
+        config = config_module.load_config()
+        for section, values in overrides.items():
+            if isinstance(values, dict) and isinstance(config.get(section), dict):
+                config[section] = {**config[section], **values}
+            else:
+                config[section] = values
+        path = tmp_path / "config.yml"
+        path.write_text(yaml.safe_dump(config))
+        monkeypatch.setattr(config_module, "CONFIG_PATH", path)
+
+    return apply
+
+
+@pytest.fixture
 def fake_redis_memory() -> FakeRedisMemory:
     return FakeRedisMemory()
 

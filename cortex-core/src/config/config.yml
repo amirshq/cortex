@@ -1,35 +1,31 @@
-embedding_model_name: "text-embedding-ada-002"
-max_tokens: 4096
-
-llm_config: 
-  llm_system_role: "You are a helpful assistant. Use the following context to answer the question."
-
-
-llm_model_name: "gpt-3.5-turbo"
-temperature: 0.7
-max_token: 1500
-
-
+# Non-secret application settings. Loaded by src/utils/config.py.
+#
+# Secrets and per-environment values — API keys, endpoints, and the provider
+# switches (LLM_PROVIDER, EMBEDDING_PROVIDER, ...) — live in .env instead.
+# Duplicate keys are rejected at load time (see utils/config.py).
 
 directories:
   db_path: "data/chatbot.db"
   vectordb_dir: "data/vectordb"
 
-llm_config:
-  chat_model: "gpt-4o"
-  summary_model: "gpt-3.5-turbo"
-  rag_model: "gpt-4o-mini"
-  temperature: 0.0
+# Every model the app uses — the ONE place to change them.
+#
+# Names are OpenAI model names. With LLM_PROVIDER / EMBEDDING_PROVIDER=azure_openai
+# the Azure *deployment* names from .env are used instead
+# (AZURE_OPENAI_CHAT_DEPLOYMENT_NAME / AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME),
+# and with LLM_PROVIDER=huggingface the local model is HF_MODEL_NAME.
+models:
+  chat:                    # the agent behind POST /chat
+    name: "gpt-4o"
+  rag:                     # answers POST /rag/query from retrieved chunks
+    name: "gpt-4o-mini"
+    temperature: 0.7
+    max_tokens: 512
+  embedding:               # changing this requires re-indexing: vectors from
+    name: "text-embedding-3-small"   # different models are not comparable
+  reranker:                # cross-encoder that scores retrieved chunks
+    name: "BAAI/bge-reranker-base"
 
-chat_history_config:
-  max_history_pairs: 2
-  max_characters: 1000
-  max_tokens: 2000
+prompts:
+  rag_system_role: "You are a helpful assistant. Use the following context to answer the question."
 
-agent_config:
-  max_function_calls: 3
-
-vectordb_config:
-  collection_name: "chat_history"
-  embedding_model: "text-embedding-3-small" 
-  k: 3

@@ -97,7 +97,9 @@ async def process_chat_message(request: ChatMessageRequest) -> Dict:
 
     return {
         "reply": reply,
-        "model_used": "gpt-4o",
+        # The model the agent actually used (config.yml → models.chat, or the
+        # Azure deployment) — this label feeds chat_model_requests_total{model}.
+        "model_used": chatbot.model_name,
         "tokens_used": None,
     }
 

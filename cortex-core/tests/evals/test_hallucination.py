@@ -134,7 +134,7 @@ class TestEmptyContextBehaviour:
         "I don't know" rule rather than its own training data."""
         from src.business.core.model import create_llm
 
-        llm = create_llm(model_name="gpt-4o-mini")
+        llm = create_llm(role="rag")
         answer = llm.generate("What is Veldrin Corp's employee count?", [])
         print(f"\n  answer with no context: {answer[:200]!r}")
         assert looks_like_a_refusal(answer), (
@@ -147,7 +147,7 @@ class TestEmptyContextBehaviour:
         it into an answer about the company."""
         from src.business.core.model import create_llm
 
-        llm = create_llm(model_name="gpt-4o-mini")
+        llm = create_llm(role="rag")
         answer = llm.generate(
             "How many people does Veldrin Corp employ?",
             ["Relative humidity is the ratio of the partial pressure of water "

@@ -46,7 +46,7 @@ src/
     long_term_memory.py   Longer-term memory.
     chat_history_manager.py
     responsecache.py
-  config/config.yml  Non-secret app config (model names, temperature, dirs, RAG params).
+  config/config.yml  Non-secret settings — the ONLY place models are named (models:).
   utils/config.py    YAML loader for config.yml.
   ui/             React + Vite frontend (separate npm project, not containerized).
   Learn/          Architecture/teaching docs — read before changing layer boundaries.
@@ -106,11 +106,18 @@ whether the backend runs bare or via Docker Compose.
 
 ## ⚙️ Configuration
 
-- **Secrets/env** — `.env` (gitignored, not committed): `OPENAI_API_KEY`, `OPENAI_MODEL_NAME`,
-  `OPENAI_TEMPERATURE`, `OPENAI_MAX_TOKENS`, `HF_TOKEN`, `LLM_PROVIDER`, plus `REDIS_URL` and
-  `GRAFANA_ADMIN_PASSWORD` used by the Docker stack.
-- **Non-secret tunables** — `src/config/config.yml` (model names, RAG `k`, history limits,
-  agent config), loaded via `src/utils/config.py`.
+- **Secrets/env** — `.env` (gitignored, not committed): `OPENAI_API_KEY`, `HF_TOKEN`,
+  `HF_MODEL_NAME`, `LLM_PROVIDER` and the other provider switches, plus `REDIS_URL` and
+  `GRAFANA_ADMIN_PASSWORD` used by the Docker stack. See `.env.example`.
+- **Non-secret settings** — `src/config/config.yml`, loaded via `src/utils/config.py`.
+
+**Models are configured only in `src/config/config.yml` → `models:`**, one entry per role:
+`chat` (the agent), `rag` (RAG answers, including `temperature` / `max_tokens`), `embedding`
+and `reranker`. Code reads them with `model_settings(role)` from `src/utils/config.py` and
+never names a model itself. An explicit `model_name=` argument still overrides the config.
+On Azure the deployment names in `.env` are used instead; the Hugging Face provider needs
+`HF_MODEL_NAME`. `load_config()` rejects duplicate YAML keys: a duplicated `llm_config:` block
+once silently wiped the RAG system role. The same file holds `prompts.rag_system_role`.
 
 ## 📝 API endpoints
 

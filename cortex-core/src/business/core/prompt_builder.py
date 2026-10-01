@@ -1,19 +1,11 @@
 from typing import Dict, List, Optional
 from datetime import date
-import yaml
-from pathlib import Path
 
-def _load_config() -> dict:
-    """Load configuration from config.yml file."""
-    # core/ -> business/ -> src/ -> config/config.yml
-    config_path = Path(__file__).resolve().parents[2] / "config" / "config.yml"
-    with open(config_path, "r") as f:
-        return yaml.safe_load(f)
+from src.utils.config import load_config
 
 def _get_system_role() -> str:
-    """Get LLM system role from config.yml."""
-    config = _load_config()
-    return config.get("llm_config", {}).get("llm_system_role", "You are a helpful assistant.")
+    """The RAG system prompt, from config.yml → prompts.rag_system_role."""
+    return (load_config().get("prompts") or {}).get("rag_system_role") or "You are a helpful assistant."
 
 class PromptBuilder:
     """
@@ -26,7 +18,7 @@ class PromptBuilder:
         Initialize PromptBuilder.
 
         Args:
-            system_prompt: Custom system prompt. If None, uses llm_system_role from config.yml.
+            system_prompt: Custom system prompt. If None, uses prompts.rag_system_role from config.yml.
         """
         # Use config value if system_prompt not provided
         self.system_prompt = system_prompt or _get_system_role()

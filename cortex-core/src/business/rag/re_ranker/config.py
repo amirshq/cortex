@@ -1,4 +1,6 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from src.utils.config import model_settings
 
 @dataclass(frozen=True)
 class ReRankerConfig:
@@ -12,8 +14,8 @@ class ReRankerConfig:
         top_k (int): The number of top documents to consider for re-ranking.
         threshold (float): The score threshold for filtering documents after re-ranking.
     """
-    #model
-    model_name: str = 'BAAI/bge-reranker-base'
+    #model — from config.yml → models.reranker.name (read when a config is created)
+    model_name: str = field(default_factory=lambda: model_settings("reranker")["name"])
     device: str = 'cpu'
 
     # input/output control

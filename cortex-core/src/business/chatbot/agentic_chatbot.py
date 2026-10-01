@@ -34,7 +34,7 @@ from src.business.core.live_data import create_live_data_provider, LiveDataProvi
 from src.memory.chat_history_manager import ChatHistoryManager
 from src.memory.long_term_memory import LongTermMemory
 from src.memory.redis_memory import RedisMemory
-from src.utils.config import load_config
+from src.utils.config import model_settings
 
 
 class AgenticChatbot:
@@ -50,7 +50,8 @@ class AgenticChatbot:
         user_info:        Optional dict of user profile data injected into the
                           system prompt (name, location, preferences, …).
         api_key:          OpenAI API key. Falls back to OPENAI_API_KEY env var.
-        model_name:       Chat model. Falls back to config → "gpt-4o".
+        model_name:       Override for the chat model. Defaults to config.yml →
+                          models.chat.name.
     """
 
     # ------------------------------------------------------------------ tools
@@ -121,9 +122,6 @@ class AgenticChatbot:
         self.user_info = user_info or {}
         self.live_data_provider = live_data_provider or create_live_data_provider()
 
-        config = load_config()
-        llm_config = config.get("llm_config") or {}
-
         # LLM_PROVIDER selects the client for this tool-calling loop, same
         # switch used by create_llm() elsewhere. Local Hugging Face models
         # don't support this agent's function-calling flow, so that provider
@@ -135,11 +133,8 @@ class AgenticChatbot:
             if not resolved_key:
                 raise RuntimeError("OPENAI_API_KEY must be set in environment or passed to __init__")
             self.client = OpenAI(api_key=resolved_key)
-            self.model_name = (
-                model_name
-                or llm_config.get("chat_model")
-                or "gpt-4o"
-            )
+            # config.yml → models.chat; an explicit model_name overrides it.
+            self.model_name = model_name or model_settings("chat")["name"]
 
         elif provider == "azure_openai":
             deployment = model_name or os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME")

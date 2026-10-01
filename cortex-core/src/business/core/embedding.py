@@ -10,6 +10,8 @@ from typing import List, Optional
 from openai import OpenAI
 from openai import InternalServerError
 
+from src.utils.config import model_settings
+
 
 class Embedder(ABC):
     @abstractmethod
@@ -30,20 +32,20 @@ class Embedder(ABC):
 class OpenAIEmbedder(Embedder):
     """
     Thin wrapper over OpenAI embeddings.
-    Uses text-embedding-3-small by default (fast, 1536 dims).
+    The model comes from config.yml → models.embedding.name unless passed in.
     """
 
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "text-embedding-3-small",
+        model: Optional[str] = None,
         client: Optional[OpenAI] = None,
     ):
         # `client` lets callers (e.g. the Azure branch of create_embedder())
         # inject a pre-built AzureOpenAI client — it's duck-type compatible
         # since only .embeddings.create() is ever called on it.
         self.client = client or OpenAI(api_key=api_key)
-        self.model = model
+        self.model = model or model_settings("embedding")["name"]
 
     def _embed(self, inputs: List[str], max_retries: int = 5) -> List[List[float]]:
         last_err = None
@@ -93,7 +95,7 @@ def create_embedder(
         resolved_key = api_key or os.getenv("OPENAI_API_KEY")
         if not resolved_key:
             raise RuntimeError("OPENAI_API_KEY must be set for EMBEDDING_PROVIDER=openai")
-        return OpenAIEmbedder(api_key=resolved_key, model=model or "text-embedding-3-small")
+        return OpenAIEmbedder(api_key=resolved_key, model=model or model_settings("embedding")["name"])
 
     if provider == "azure_openai":
         from .model import build_azure_openai_client

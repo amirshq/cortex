@@ -24,7 +24,7 @@ class RAGPipeline:
         collection_name: str = "pdf_chunks",
         reranker_config: ReRankerConfig | None = None,
         system_prompt: str | None = None,
-        model_name: str = "gpt-4o-mini",
+        model_name: str | None = None,
     ):
         load_dotenv()
 
@@ -39,7 +39,9 @@ class RAGPipeline:
 
         self.reranker_config = reranker_config or ReRankerConfig()
         self.prompt_builder = PromptBuilder(system_prompt)
-        self.llm = create_llm(model_name=model_name, system_prompt=system_prompt)
+        # role="rag": model, temperature and max_tokens come from config.yml →
+        # models.rag. model_name only overrides the model (evals, experiments).
+        self.llm = create_llm(role="rag", model_name=model_name, system_prompt=system_prompt)
 
     def _retrieve(self, query: str, top_k: int = 30) -> List[RetrievedChunk]:
         q_emb = self.embedder.embed_query(query)

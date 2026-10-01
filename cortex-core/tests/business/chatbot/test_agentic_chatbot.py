@@ -62,7 +62,7 @@ def build_chatbot(
     # and could flip LLM_PROVIDER out from under monkeypatch.
     with patch("src.business.chatbot.agentic_chatbot.load_dotenv"), \
          patch("src.business.chatbot.agentic_chatbot.OpenAI"), \
-         patch("src.business.chatbot.agentic_chatbot.load_config", return_value={}):
+         patch("src.business.chatbot.agentic_chatbot.model_settings", return_value={"name": "gpt-4o"}):
         bot = AgenticChatbot(
             long_term_memory=ltm,
             redis_memory=redis_memory,
@@ -99,7 +99,7 @@ class TestProviderSelection:
         """
         monkeypatch.setenv("LLM_PROVIDER", "huggingface")
         with patch("src.business.chatbot.agentic_chatbot.load_dotenv"), \
-             patch("src.business.chatbot.agentic_chatbot.load_config", return_value={}):
+             patch("src.business.chatbot.agentic_chatbot.model_settings", return_value={"name": "gpt-4o"}):
             with pytest.raises(NotImplementedError, match="tool-calling loop"):
                 AgenticChatbot(
                     long_term_memory=MagicMock(),
@@ -111,7 +111,7 @@ class TestProviderSelection:
     def test_unknown_provider_raises_not_implemented(self, monkeypatch):
         monkeypatch.setenv("LLM_PROVIDER", "llama-cpp")
         with patch("src.business.chatbot.agentic_chatbot.load_dotenv"), \
-             patch("src.business.chatbot.agentic_chatbot.load_config", return_value={}):
+             patch("src.business.chatbot.agentic_chatbot.model_settings", return_value={"name": "gpt-4o"}):
             with pytest.raises(NotImplementedError):
                 AgenticChatbot(
                     long_term_memory=MagicMock(),
@@ -124,7 +124,7 @@ class TestProviderSelection:
         monkeypatch.setenv("LLM_PROVIDER", "openai")
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         with patch("src.business.chatbot.agentic_chatbot.load_dotenv"), \
-             patch("src.business.chatbot.agentic_chatbot.load_config", return_value={}):
+             patch("src.business.chatbot.agentic_chatbot.model_settings", return_value={"name": "gpt-4o"}):
             with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
                 AgenticChatbot(
                     long_term_memory=MagicMock(),
@@ -137,7 +137,7 @@ class TestProviderSelection:
         monkeypatch.setenv("LLM_PROVIDER", "azure_openai")
         monkeypatch.delenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME", raising=False)
         with patch("src.business.chatbot.agentic_chatbot.load_dotenv"), \
-             patch("src.business.chatbot.agentic_chatbot.load_config", return_value={}):
+             patch("src.business.chatbot.agentic_chatbot.model_settings", return_value={"name": "gpt-4o"}):
             with pytest.raises(RuntimeError, match="AZURE_OPENAI_CHAT_DEPLOYMENT_NAME"):
                 AgenticChatbot(
                     long_term_memory=MagicMock(),
@@ -150,7 +150,7 @@ class TestProviderSelection:
         monkeypatch.setenv("LLM_PROVIDER", "azure_openai")
         monkeypatch.setenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME", "my-deployment")
         with patch("src.business.chatbot.agentic_chatbot.load_dotenv"), \
-             patch("src.business.chatbot.agentic_chatbot.load_config", return_value={}), \
+             patch("src.business.chatbot.agentic_chatbot.model_settings", return_value={"name": "gpt-4o"}), \
              patch("src.business.chatbot.agentic_chatbot.build_azure_openai_client") as mock_build:
             bot = AgenticChatbot(
                 long_term_memory=MagicMock(),
