@@ -1,0 +1,1 @@
+The Kestrel-7 sensor array operates in a temperature range of minus 40 to plus 65 degrees Celsius. It reports humidity with an accuracy of plus or minus 0.8 percent relative humidity. Battery life is rated at 26 months under normal duty cycle. The device transmits over LoRaWAN at 915 megahertz in North America and 868 megahertz in Europe. Each unit weighs 340 grams.
