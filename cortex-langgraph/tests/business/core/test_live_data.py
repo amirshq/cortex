@@ -80,15 +80,15 @@ class TestMockLiveDataProvider:
 class TestDuckDuckGoSearchProvider:
     """Test DuckDuckGo search provider.
 
-    The provider talks to the duckduckgo-search package (DDGS), not to
+    The provider talks to the ddgs package (DDGS), not to
     ``requests`` — so every test here patches ``live_data.DDGS`` and no test
     touches the network.
     """
 
     def test_initialization_checks_ddgs(self):
-        """DuckDuckGo provider requires the duckduckgo-search library."""
+        """DuckDuckGo provider requires the ddgs library."""
         with patch("src.business.core.live_data.DDGS", None):
-            with pytest.raises(RuntimeError, match="duckduckgo-search"):
+            with pytest.raises(RuntimeError, match="ddgs"):
                 DuckDuckGoSearchProvider()
 
     def test_search_makes_api_call(self):
@@ -183,7 +183,7 @@ class TestNewsAPIProvider:
                     NewsAPIProvider()
 
     def test_search_makes_api_call(self):
-        """search() calls NewsAPI."""
+        """news() calls NewsAPI."""
         with patch.dict(os.environ, {"NEWS_API_KEY": "test-key"}):
             provider = NewsAPIProvider()
 
@@ -202,24 +202,24 @@ class TestNewsAPIProvider:
             }
 
             with patch("src.business.core.live_data.requests.get", return_value=mock_response):
-                results = provider.search("test")
+                results = provider.news("test")
 
             assert len(results) == 1
             assert results[0]["title"] == "Test Article"
 
     def test_search_handles_api_error(self):
-        """search() handles API errors."""
+        """news() handles API errors."""
         with patch.dict(os.environ, {"NEWS_API_KEY": "test-key"}):
             provider = NewsAPIProvider()
 
             with patch("src.business.core.live_data.requests.get", side_effect=Exception("API error")):
-                results = provider.search("test")
+                results = provider.news("test")
 
             assert len(results) > 0
             assert "error" in results[0]["summary"].lower() or "failed" in results[0]["summary"].lower()
 
     def test_search_handles_api_error_response(self):
-        """search() handles API error responses."""
+        """news() handles API error responses."""
         with patch.dict(os.environ, {"NEWS_API_KEY": "test-key"}):
             provider = NewsAPIProvider()
 
@@ -230,13 +230,13 @@ class TestNewsAPIProvider:
             }
 
             with patch("src.business.core.live_data.requests.get", return_value=mock_response):
-                results = provider.search("test")
+                results = provider.news("test")
 
             assert len(results) > 0
             assert "error" in results[0]["summary"].lower()
 
     def test_search_respects_limit(self):
-        """search() respects limit parameter."""
+        """news() respects limit parameter."""
         with patch.dict(os.environ, {"NEWS_API_KEY": "test-key"}):
             provider = NewsAPIProvider()
 
@@ -255,9 +255,87 @@ class TestNewsAPIProvider:
             }
 
             with patch("src.business.core.live_data.requests.get", return_value=mock_response):
-                results = provider.search("test", limit=3)
+                results = provider.news("test", limit=3)
 
             assert len(results) == 3
+
+
+    def test_news_filters_by_date_and_language(self):
+        """"Last 7 days" must actually mean that: cortex-core sent no date
+        filter, so a weekly question got articles from any date, any language."""
+        from datetime import date, timedelta
+
+        with patch.dict(os.environ, {"NEWS_API_KEY": "test-key"}):
+            provider = NewsAPIProvider()
+            mock_response = Mock()
+            mock_response.json.return_value = {"status": "ok", "articles": []}
+            with patch("src.business.core.live_data.requests.get", return_value=mock_response) as get:
+                provider.news("AI", days=7)
+        params = get.call_args.kwargs["params"]
+        assert params["from"] == (date.today() - timedelta(days=7)).isoformat()
+        assert params["language"] == "en"
+
+    def test_news_results_carry_the_publication_date(self):
+        with patch.dict(os.environ, {"NEWS_API_KEY": "test-key"}):
+            provider = NewsAPIProvider()
+            mock_response = Mock()
+            mock_response.json.return_value = {"status": "ok", "articles": [
+                {"title": "T", "description": "D", "source": {"name": "S"}, "url": "u",
+                 "publishedAt": "2026-09-30T08:00:00Z"}]}
+            with patch("src.business.core.live_data.requests.get", return_value=mock_response):
+                assert provider.news("AI")[0]["date"] == "2026-09-30"
+
+    def test_general_search_goes_to_the_web_not_newsapi(self):
+        """NewsAPI only finds articles that MENTION a topic, so "what is
+        LangGraph?" must be answered from a general web search."""
+        mock_ddgs = Mock()
+        mock_ddgs.text.return_value = [{"title": "LangGraph docs", "body": "LangGraph is…", "href": "https://x"}]
+        with patch.dict(os.environ, {"NEWS_API_KEY": "test-key"}), \
+             patch("src.business.core.live_data.DDGS", return_value=mock_ddgs), \
+             patch("src.business.core.live_data.requests.get") as newsapi:
+            results = NewsAPIProvider().search("what is LangGraph", limit=5)
+        assert results[0]["title"] == "LangGraph docs"
+        newsapi.assert_not_called()
+
+    def test_general_search_falls_back_to_news_without_ddgs(self):
+        with patch.dict(os.environ, {"NEWS_API_KEY": "test-key"}), \
+             patch("src.business.core.live_data.DDGS", None):
+            provider = NewsAPIProvider()
+            mock_response = Mock()
+            mock_response.json.return_value = {"status": "ok", "articles": [
+                {"title": "Only news", "description": "", "source": {"name": "S"}, "url": "u"}]}
+            with patch("src.business.core.live_data.requests.get", return_value=mock_response):
+                assert provider.search("anything")[0]["title"] == "Only news"
+
+
+class TestDuckDuckGoNews:
+    def test_news_maps_days_to_a_ddgs_time_window(self):
+        mock_ddgs = Mock()
+        mock_ddgs.news.return_value = []
+        with patch("src.business.core.live_data.DDGS", return_value=mock_ddgs):
+            provider = DuckDuckGoSearchProvider()
+            for days, window in ((1, "d"), (7, "w"), (30, "m"), (365, "y")):
+                provider.news("AI", days=days)
+                assert mock_ddgs.news.call_args.kwargs["timelimit"] == window
+
+    def test_news_maps_fields_including_date(self):
+        mock_ddgs = Mock()
+        mock_ddgs.news.return_value = [{"title": "T", "body": "B", "url": "https://u",
+                                        "source": "Reuters", "date": "2026-09-30T10:00:00+00:00"}]
+        with patch("src.business.core.live_data.DDGS", return_value=mock_ddgs):
+            (result,) = DuckDuckGoSearchProvider().news("AI")
+        assert result == {"title": "T", "summary": "B", "url": "https://u",
+                          "source": "Reuters", "date": "2026-09-30"}
+
+    def test_news_error_is_contained(self):
+        mock_ddgs = Mock()
+        mock_ddgs.news.side_effect = RuntimeError("blocked")
+        with patch("src.business.core.live_data.DDGS", return_value=mock_ddgs):
+            (result,) = DuckDuckGoSearchProvider().news("AI")
+        assert "blocked" in result["summary"]
+
+    def test_mock_provider_news_falls_back_to_search(self):
+        assert MockLiveDataProvider().news("AI", limit=1)[0]["title"].startswith("Mock result")
 
 
 class TestCreateLiveDataProviderFactory:

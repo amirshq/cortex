@@ -17,7 +17,7 @@ from typing import List
 
 import pytest
 
-from tests.evals.conftest import Stopwatch, percentile
+from tests.evals.conftest import Stopwatch, percentile, retrieve_docs
 
 pytestmark = pytest.mark.eval
 
@@ -84,7 +84,7 @@ class TestVectorSearchLatency:
         samples = []
         for embedding in embeddings:
             with Stopwatch("search") as sw:
-                indexed_corpus.query(embedding, 5)
+                indexed_corpus.similarity_search_by_vector_with_relevance_scores(embedding, k=5)
             samples.append(sw.elapsed)
 
         report("vector_search (embedding excluded)", samples)
@@ -95,9 +95,9 @@ class TestVectorSearchLatency:
         embedding = real_embedder.embed_query("Kestrel-7 specifications")
 
         with Stopwatch("k=1") as small:
-            indexed_corpus.query(embedding, 1)
+            indexed_corpus.similarity_search_by_vector_with_relevance_scores(embedding, k=1)
         with Stopwatch("k=30") as large:
-            indexed_corpus.query(embedding, 30)
+            indexed_corpus.similarity_search_by_vector_with_relevance_scores(embedding, k=30)
 
         print(f"\n  k=1  = {small.elapsed:.4f}s")
         print(f"  k=30 = {large.elapsed:.4f}s")
@@ -109,17 +109,9 @@ class TestRerankerLatency:
     accidentally moving it onto CPU or enlarging top_k_input."""
 
     def test_rerank_p95(self, indexed_corpus, real_embedder, real_reranker, golden_set):
-        from src.business.rag.re_ranker.interface import RetrievedChunk
-
         samples = []
         for case in golden_set["retrieval_cases"]:
-            result = indexed_corpus.query(real_embedder.embed_query(case["question"]), 5)
-            chunks = [
-                RetrievedChunk(chunk_id=i, text=d, metadata=m or {},
-                               vector_score=float(s) if s is not None else 0.0)
-                for i, d, m, s in zip(result["ids"][0], result["documents"][0],
-                                      result["metadatas"][0], result["distances"][0])
-            ]
+            chunks = retrieve_docs(indexed_corpus, real_embedder, case["question"], 5)
             with Stopwatch("rerank") as sw:
                 real_reranker.re_rank(case["question"], chunks)
             samples.append(sw.elapsed)
@@ -131,9 +123,9 @@ class TestRerankerLatency:
         """The first scored query pays model warm-up. In a fresh container
         that cost lands on a real user's request — worth seeing explicitly
         rather than discovering in production p99s."""
-        from src.business.rag.re_ranker.interface import RetrievedChunk
+        from langchain_core.documents import Document
 
-        chunk = RetrievedChunk("c1", "Some text about humidity sensors.", {}, 0.1)
+        chunk = Document(id="c1", page_content="Some text about humidity sensors.", metadata={"vector_score": 0.1})
         with Stopwatch("cold") as cold:
             real_reranker.re_rank("humidity", [chunk])
         with Stopwatch("warm") as warm:
@@ -157,18 +149,19 @@ class TestEndToEndLatency:
 
     def test_stage_attribution(self, rag_pipeline, golden_set):
         """Diagnostic, not a gate: splits one representative query into its
-        stages so a regression can be attributed instead of guessed at."""
-        from src.business.rag.re_ranker.orchestrator import select_context
-
+        stages so a regression can be attributed instead of guessed at.
+        Calls the graph's own node functions in order, so each is timed alone."""
         question = golden_set["retrieval_cases"][0]["question"]
+        state = {"question": question}
 
         with Stopwatch("retrieve") as retrieve:
-            chunks = rag_pipeline._retrieve(question, top_k=rag_pipeline.reranker_config.top_k_input)
+            state.update(rag_pipeline._retrieve(state))
         with Stopwatch("rerank") as rerank:
-            selected, _ = select_context(query=question, retrieved_chunks=chunks,
-                                         reranker=rag_pipeline.reranker, policy="hybrid")
+            state.update(rag_pipeline._rerank(state))
+            if not state["context"]:
+                state.update(rag_pipeline._fallback(state))
         with Stopwatch("generate") as generate:
-            rag_pipeline.llm.generate(question, [c.text for c in selected])
+            rag_pipeline._generate(state)
 
         total = retrieve.elapsed + rerank.elapsed + generate.elapsed
         print(f"\n  question: {question!r}")
@@ -183,11 +176,14 @@ class TestHermeticLatency:
     """CPU-only work — no network, so these are stable enough to gate on."""
 
     def test_chunking_throughput(self):
-        from src.business.rag.pdfingest.chunk import Chunker
+        from langchain_core.documents import Document
+
+        from src.business.rag.pdfingest.chunk import split_documents
 
         text = "word " * 200_000  # ~1 MB
         with Stopwatch("chunk") as sw:
-            chunks = Chunker(chunk_size=800, overlap=100).split(text, {"source_id": "perf.pdf"})
+            chunks = split_documents([Document(page_content=text, metadata={"source_id": "perf.pdf"})],
+                                     chunk_size=800, overlap=100)
 
         mb = len(text) / 1_000_000
         print(f"\n  chunked {mb:.2f} MB into {len(chunks)} chunks in {sw.elapsed:.3f}s")

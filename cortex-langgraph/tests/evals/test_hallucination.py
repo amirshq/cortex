@@ -39,6 +39,21 @@ REFUSAL_MARKERS = (
 )
 
 
+def rag_generate(question: str, context: List[str]) -> str:
+    """The RAG generate step on its own: the production prompt | model | parser
+    chain, with the same model and sampling settings as RAGPipeline
+    (config.yml → models.rag)."""
+    from langchain_core.documents import Document
+    from langchain_core.output_parsers import StrOutputParser
+
+    from src.business.core.model import create_llm
+    from src.business.core.prompt_builder import build_rag_prompt, format_context
+
+    chain = build_rag_prompt() | create_llm(role="rag") | StrOutputParser()
+    return chain.invoke({"question": question,
+                         "context": format_context([Document(page_content=c) for c in context])})
+
+
 def looks_like_a_refusal(answer: str) -> bool:
     return any(marker in answer.lower() for marker in REFUSAL_MARKERS)
 
@@ -51,7 +66,7 @@ class TestGroundedAnswers:
         hits = 0
         print()
         for case in cases:
-            answer, _ = rag_pipeline.answer(case["question"])
+            answer, _, _ = rag_pipeline.answer(case["question"])
             grounded = any(token.lower() in answer.lower() for token in case["must_contain_any"])
             hits += grounded
             print(f"  [{'ok  ' if grounded else 'MISS'}] {case['question'][:50]!r}")
@@ -78,7 +93,7 @@ class TestGroundedAnswers:
         """An answer without sources cannot be verified by the user, which
         is the only defence left once the model is fluent."""
         for case in golden_set["grounded_cases"]:
-            _, chunks = rag_pipeline.answer(case["question"])
+            _, chunks, _ = rag_pipeline.answer(case["question"])
             assert chunks, f"no sources returned for {case['question']!r}"
 
 
@@ -90,7 +105,7 @@ class TestRefusalOnUnanswerable:
         refusals = 0
         print()
         for case in cases:
-            answer, _ = rag_pipeline.answer(case["question"])
+            answer, _, _ = rag_pipeline.answer(case["question"])
             refused = looks_like_a_refusal(answer)
             refusals += refused
             print(f"  [{'ok  ' if refused else 'HALLUCINATED'}] {case['question'][:52]!r}")
@@ -110,7 +125,7 @@ class TestRefusalOnUnanswerable:
     def test_does_not_invent_a_nonexistent_product(self, rag_pipeline):
         """The corpus has a Kestrel-7. There is no Kestrel-9. A model that
         answers about one is pattern-matching, not retrieving."""
-        answer, _ = rag_pipeline.answer("What is the battery life of the Kestrel-9?")
+        answer, _, _ = rag_pipeline.answer("What is the battery life of the Kestrel-9?")
         print(f"\n  answer: {answer[:200]!r}")
         assert looks_like_a_refusal(answer) or "kestrel-7" in answer.lower(), (
             "invented specifications for a product not in the corpus"
@@ -119,7 +134,7 @@ class TestRefusalOnUnanswerable:
     def test_does_not_extrapolate_beyond_the_corpus_years(self, rag_pipeline):
         """Financials stop at FY2024. A fluent trend-extrapolation to 2026
         reads exactly like a retrieved fact."""
-        answer, _ = rag_pipeline.answer("What was Veldrin's revenue in fiscal 2026?")
+        answer, _, _ = rag_pipeline.answer("What was Veldrin's revenue in fiscal 2026?")
         print(f"\n  answer: {answer[:200]!r}")
         assert looks_like_a_refusal(answer) or "2024" in answer, (
             "extrapolated a revenue figure for a year absent from the corpus"
@@ -132,10 +147,7 @@ class TestEmptyContextBehaviour:
     def test_no_context_produces_a_refusal_not_an_answer(self, require_openai_key):
         """With zero context the model must fall back on the prompt's
         "I don't know" rule rather than its own training data."""
-        from src.business.core.model import create_llm
-
-        llm = create_llm(model_name="gpt-4o-mini")
-        answer = llm.generate("What is Veldrin Corp's employee count?", [])
+        answer = rag_generate("What is Veldrin Corp's employee count?", [])
         print(f"\n  answer with no context: {answer[:200]!r}")
         assert looks_like_a_refusal(answer), (
             "answered from training data with no retrieved context — the "
@@ -145,10 +157,7 @@ class TestEmptyContextBehaviour:
     def test_irrelevant_context_is_not_forced_into_an_answer(self, require_openai_key):
         """Given only the off-topic distractor, the model must not stretch
         it into an answer about the company."""
-        from src.business.core.model import create_llm
-
-        llm = create_llm(model_name="gpt-4o-mini")
-        answer = llm.generate(
+        answer = rag_generate(
             "How many people does Veldrin Corp employ?",
             ["Relative humidity is the ratio of the partial pressure of water "
              "vapour to the equilibrium vapour pressure at a given temperature."],
@@ -192,8 +201,8 @@ class TestLLMAsJudge:
         grounded = 0
         print()
         for case in cases:
-            answer, chunks = rag_pipeline.answer(case["question"])
-            verdict = self._judge([c.text for c in chunks], answer)
+            answer, chunks, _ = rag_pipeline.answer(case["question"])
+            verdict = self._judge([c.page_content for c in chunks], answer)
             grounded += verdict
             print(f"  [{'GROUNDED  ' if verdict else 'UNGROUNDED'}] {case['question'][:48]!r}")
             if not verdict:

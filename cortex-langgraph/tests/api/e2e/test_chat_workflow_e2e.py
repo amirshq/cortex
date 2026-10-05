@@ -9,6 +9,7 @@ session list, and disappear when deleted.
 from __future__ import annotations
 
 import pytest
+from langchain_core.messages import HumanMessage, ToolMessage
 
 import src.api.router as router
 
@@ -65,8 +66,8 @@ class TestSessionLifecycle:
         # The session keeps the title from its first message.
         assert [s["title"] for s in sessions(client)] == ["First question"]
         # Short-term memory: the earlier turn was sent to the model with the new one.
-        sent = chat_stack.llm.completions.calls[-1]["messages"]
-        assert {"role": "user", "content": "First question"} in sent
+        sent = chat_stack.llm.calls[-1]
+        assert "First question" in [m.content for m in sent if isinstance(m, HumanMessage)]
 
 
 class TestMemoryFanOut:
@@ -79,7 +80,7 @@ class TestMemoryFanOut:
             {"role": "user", "content": "I like sailing"},
             {"role": "assistant", "content": "Noted: you like sailing."},
         ]
-        (row,) = chat_stack.conversation_store.rows
+        (row,) = chat_stack.memory_rows()
         assert row["metadata"]["user_id"] == str(USER)
         assert row["text"] == "user: I like sailing\nassistant: Noted: you like sailing."
         assert history(client)["total"] == 2
@@ -87,7 +88,7 @@ class TestMemoryFanOut:
     def test_the_agent_recalls_an_earlier_session_through_its_tool(self, client, chat_stack):
         chat_stack.queue_replies(
             chat_stack.reply("Noted."),
-            chat_stack.tool_call("search_vector_db", '{"query": "hobbies"}'),
+            chat_stack.tool_call("search_vector_db", {"query": "hobbies"}),
             chat_stack.reply("You told me you like sailing."),
         )
 
@@ -95,10 +96,10 @@ class TestMemoryFanOut:
         response = chat(client, "What do I like?", session_id="sess-2")
 
         assert response.json()["reply"] == "You told me you like sailing."
-        sent = chat_stack.llm.completions.calls[-1]["messages"]
-        tool_results = [m for m in sent if isinstance(m, dict) and m.get("role") == "tool"]
+        sent = chat_stack.llm.calls[-1]
+        tool_results = [m for m in sent if isinstance(m, ToolMessage)]
         assert len(tool_results) == 1
-        assert "I like sailing" in tool_results[0]["content"]
+        assert "I like sailing" in tool_results[0].content
 
 
 class TestSessionOwnership:
@@ -134,28 +135,25 @@ class TestRejectedRequestsLeaveNoTrace:
         contents = [m["content"] for m in history(client)["messages"]]
         assert len(contents) == capacity * 2
         assert "one too many" not in contents
-        assert len(chat_stack.llm.completions.calls) == capacity
+        assert len(chat_stack.llm.calls) == capacity
 
     def test_invalid_requests_reach_neither_the_model_nor_storage(self, client, chat_stack):
         assert client.post("/api/v1/chat", json={"user_id": USER}).status_code == 422
         assert chat(client, "   ").status_code == 400
 
-        assert chat_stack.llm.completions.calls == []
+        assert chat_stack.llm.calls == []
         assert chat_stack.redis.store == {}
         assert sessions(client) == []
 
     def test_a_model_failure_is_a_500_and_persists_nothing(self, client, chat_stack):
-        def upstream_timeout(**kwargs):
-            raise RuntimeError("upstream timeout")
-
-        chat_stack.llm.completions.create = upstream_timeout
+        chat_stack.queue_replies(RuntimeError("upstream timeout"))
 
         response = chat(client, "hello")
 
         assert response.status_code == 500
         assert response.json() == {"detail": "Internal server error: upstream timeout"}
         assert chat_stack.redis.store == {}
-        assert chat_stack.conversation_store.rows == []
+        assert chat_stack.memory_rows() == []
         assert sessions(client) == []
 
 
@@ -206,4 +204,4 @@ class TestKnownIssues:
         assert client.delete("/api/v1/sessions/sess-1", params={"user_id": USER}).status_code == 200
 
         assert "sess-1" not in chat_stack.redis.store
-        assert chat_stack.conversation_store.rows == []
+        assert chat_stack.memory_rows() == []

@@ -11,8 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
-from src.business.rag.re_ranker.interface import ReRankedChunk, RetrievedChunk
+from langchain_core.documents import Document
 
 pytestmark = pytest.mark.e2e
 
@@ -36,9 +35,11 @@ class TestRagQuery:
             self, client, rag_pipeline, metric):
         long_text = "Warranty terms apply. " * 50
         rag_pipeline.answer = "The warranty is 24 months."
-        rag_pipeline.chunks = [ReRankedChunk(
-            chunk_id="c1", text=long_text, metadata={"source_id": "manual.pdf", "section": "text"},
-            vector_score=0.12, rerank_score=4.567891)]
+        rag_pipeline.chunks = [Document(
+            id="c1", page_content=long_text,
+            metadata={"source_id": "manual.pdf", "section": "text",
+                      "vector_score": 0.12, "rerank_score": 4.567891})]
+        rag_pipeline.confidence = "high"
         queries, top, low = metric(QUERIES), metric(TOP_SCORE_COUNT), metric(LOW_CONFIDENCE)
 
         response = ask(client)
@@ -56,9 +57,10 @@ class TestRagQuery:
     def test_a_gated_fallback_is_scored_by_vector_distance_and_flagged_low_confidence(
             self, client, rag_pipeline, metric):
         rag_pipeline.answer = "Europe uses 868 MHz."
-        rag_pipeline.chunks = [RetrievedChunk(
-            chunk_id="c2", text="EU frequency: 868 MHz.", metadata={"source_id": "specs.pdf"},
-            vector_score=0.3141592)]
+        rag_pipeline.chunks = [Document(
+            id="c2", page_content="EU frequency: 868 MHz.",
+            metadata={"source_id": "specs.pdf", "vector_score": 0.3141592})]
+        rag_pipeline.confidence = "low"
         queries, top, low = metric(QUERIES), metric(TOP_SCORE_COUNT), metric(LOW_CONFIDENCE)
 
         body = ask(client, "What radio frequency is used in Europe?").json()

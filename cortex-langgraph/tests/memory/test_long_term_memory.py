@@ -1,189 +1,183 @@
-"""Tests for LongTermMemory — the semantic-recall layer over the vector store.
+"""Tests for LongTermMemory — remember / recall / forget, scoped per user.
 
-LongTermMemory owns memory *semantics*, not storage: what gets chunked,
-what metadata is attached, and how a turn is serialised before embedding.
-Its collaborators are injected, so these tests use the in-memory fakes and
-assert on the rows that would have been written.
+These run against a REAL Chroma vector store (in-process, in tmp_path) with a
+deterministic fake embedder, so they check the actual round trip through
+LangChain's VectorStore interface rather than a hand-written fake of it.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
+from unittest.mock import MagicMock
 
 import pytest
+from langchain_text_splitters import CharacterTextSplitter
 
 from src.memory.long_term_memory import LongTermMemory
-from tests.conftest import FakeConversationVectorStore, FakeEmbedder
-
-
-class SplittingChunker:
-    """Splits on '|' so chunking behaviour is visible in assertions."""
-    def split(self, text): return [p for p in text.split("|") if p]
-
-
-class IdentityChunker:
-    def split(self, text): return [text]
 
 
 @pytest.fixture
-def store():
-    return FakeConversationVectorStore()
+def memory(conversation_store) -> LongTermMemory:
+    return LongTermMemory(vectorstore=conversation_store)
 
 
-@pytest.fixture
-def embedder():
-    return FakeEmbedder()
-
-
-@pytest.fixture
-def memory(store, embedder):
-    return LongTermMemory(vectordb=store, embedder=embedder, chunker=IdentityChunker())
+def all_rows(memory: LongTermMemory):
+    got = memory.vectorstore.get()
+    return [
+        {"id": i, "text": d, "metadata": m}
+        for i, d, m in zip(got["ids"], got["documents"], got["metadatas"])
+    ]
 
 
 class TestRemember:
-    def test_writes_one_row(self, memory, store):
-        memory.remember("a fact", user_id="u1")
-        assert len(store.rows) == 1
-        assert store.rows[0]["text"] == "a fact"
+    def test_writes_one_row_for_short_content(self, memory):
+        memory.remember("likes hiking", user_id="u1")
+        assert [r["text"] for r in all_rows(memory)] == ["likes hiking"]
 
-    def test_chunks_before_storing(self, store, embedder):
-        memory = LongTermMemory(vectordb=store, embedder=embedder, chunker=SplittingChunker())
-        memory.remember("one|two|three", user_id="u1")
-        assert [r["text"] for r in store.rows] == ["one", "two", "three"]
+    def test_splits_long_content_before_storing(self, conversation_store):
+        splitter = CharacterTextSplitter(separator=". ", chunk_size=20, chunk_overlap=0)
+        memory = LongTermMemory(conversation_store, text_splitter=splitter)
+        memory.remember("First fact here. Second fact here. Third fact here.", user_id="u1")
+        assert len(all_rows(memory)) == 3
 
-    def test_embeds_each_chunk(self, store, embedder):
-        memory = LongTermMemory(vectordb=store, embedder=embedder, chunker=SplittingChunker())
-        memory.remember("one|two", user_id="u1")
-        assert embedder.embed_calls == ["one", "two"]
+    def test_embeds_each_chunk(self, conversation_store, fake_embedder):
+        splitter = CharacterTextSplitter(separator=". ", chunk_size=20, chunk_overlap=0)
+        memory = LongTermMemory(conversation_store, text_splitter=splitter)
+        memory.remember("First fact here. Second fact here.", user_id="u1")
+        embedded = [t for batch in fake_embedder.document_calls for t in batch]
+        assert len(embedded) == 2
 
-    def test_attaches_the_documented_metadata(self, memory, store):
-        memory.remember("fact", user_id="u1", memory_type="preference", importance=5)
-        meta = store.rows[0]["metadata"]
+    def test_attaches_the_documented_metadata(self, memory):
+        memory.remember("fact", user_id="u1", memory_type="preference", importance=3)
+        meta = all_rows(memory)[0]["metadata"]
         assert meta["user_id"] == "u1"
         assert meta["type"] == "preference"
-        assert meta["importance"] == 5
-        assert meta["created_at"]
+        assert meta["importance"] == 3
 
-    def test_defaults_type_and_importance(self, memory, store):
+    def test_defaults_type_and_importance(self, memory):
         memory.remember("fact", user_id="u1")
-        assert store.rows[0]["metadata"]["type"] == "knowledge"
-        assert store.rows[0]["metadata"]["importance"] == 1
+        meta = all_rows(memory)[0]["metadata"]
+        assert meta["type"] == "knowledge"
+        assert meta["importance"] == 1
 
-    def test_created_at_is_iso_parseable(self, memory, store):
+    def test_created_at_is_iso_parseable(self, memory):
         memory.remember("fact", user_id="u1")
-        datetime.fromisoformat(store.rows[0]["metadata"]["created_at"])
+        datetime.fromisoformat(all_rows(memory)[0]["metadata"]["created_at"])
 
-    def test_empty_chunk_list_writes_nothing(self, store, embedder):
-        class EmptyChunker:
-            def split(self, text): return []
-
-        LongTermMemory(store, embedder, EmptyChunker()).remember("x", user_id="u1")
-        assert store.rows == []
+    def test_empty_content_writes_nothing(self, memory):
+        memory.remember("", user_id="u1")
+        assert all_rows(memory) == []
 
 
 class TestRememberConversation:
-    """The hot path — called after every chat turn."""
+    def test_stores_the_pair_as_one_row(self, memory):
+        memory.remember_conversation("hi", "hello", user_id="u1")
+        assert len(all_rows(memory)) == 1
 
-    def test_stores_the_pair_as_one_row(self, memory, store):
-        """Chunking is skipped deliberately: splitting a Q/A pair breaks the
-        semantic coherence that makes recall useful."""
-        memory.remember_conversation("what is X?", "X is Y", user_id="u1")
-        assert len(store.rows) == 1
+    def test_uses_the_role_prefixed_format(self, memory):
+        memory.remember_conversation("hi", "hello", user_id="u1")
+        assert all_rows(memory)[0]["text"] == "user: hi\nassistant: hello"
 
-    def test_uses_the_role_prefixed_format(self, memory, store):
-        memory.remember_conversation("Q", "A", user_id="u1")
-        assert store.rows[0]["text"] == "user: Q\nassistant: A"
+    def test_embeds_the_combined_text(self, memory, fake_embedder):
+        memory.remember_conversation("hi", "hello", user_id="u1")
+        assert fake_embedder.document_calls[-1] == ["user: hi\nassistant: hello"]
 
-    def test_embeds_the_combined_text(self, memory, embedder):
-        memory.remember_conversation("Q", "A", user_id="u1")
-        assert embedder.embed_calls == ["user: Q\nassistant: A"]
+    def test_tags_the_row_as_a_conversation(self, memory):
+        memory.remember_conversation("hi", "hello", user_id="u1")
+        assert all_rows(memory)[0]["metadata"]["type"] == "conversation"
 
-    def test_tags_the_row_as_a_conversation(self, memory, store):
-        """recall() and any future type filter depend on this tag."""
-        memory.remember_conversation("Q", "A", user_id="u1")
-        assert store.rows[0]["metadata"]["type"] == "conversation"
+    def test_scopes_the_row_to_the_user(self, memory):
+        memory.remember_conversation("hi", "hello", user_id="u42")
+        assert all_rows(memory)[0]["metadata"]["user_id"] == "u42"
 
-    def test_scopes_the_row_to_the_user(self, memory, store):
-        memory.remember_conversation("Q", "A", user_id="u42")
-        assert store.rows[0]["metadata"]["user_id"] == "u42"
+    def test_does_not_invoke_the_splitter(self, conversation_store):
+        """Conversation pairs are stored whole — splitting would break their coherence."""
+        splitter = MagicMock()
+        memory = LongTermMemory(conversation_store, text_splitter=splitter)
+        memory.remember_conversation("x " * 2000, "y " * 2000, user_id="u1")
+        splitter.split_text.assert_not_called()
+        assert len(all_rows(memory)) == 1
 
-    def test_does_not_invoke_the_chunker(self, store, embedder):
-        class ExplodingChunker:
-            def split(self, text): raise AssertionError("chunker must not run")
-
-        LongTermMemory(store, embedder, ExplodingChunker()).remember_conversation(
-            "Q", "A", user_id="u1")
-
-    def test_multiline_content_round_trips(self, memory, store):
-        memory.remember_conversation("line1\nline2", "resp", user_id="u1")
-        assert "line1\nline2" in store.rows[0]["text"]
+    def test_multiline_content_round_trips(self, memory):
+        memory.remember_conversation("line1\nline2", "a\nb", user_id="u1")
+        assert all_rows(memory)[0]["text"] == "user: line1\nline2\nassistant: a\nb"
 
 
 class TestRecall:
-    def test_embeds_the_query(self, memory, embedder):
+    def test_embeds_the_query(self, memory, fake_embedder):
         memory.recall("what do I like?", user_id="u1")
-        assert embedder.embed_calls == ["what do I like?"]
+        assert fake_embedder.query_calls[-1] == "what do I like?"
 
-    def test_filters_by_user_id(self, memory, store):
-        """Cross-user leakage here would put one user's private history in
-        another user's system prompt."""
+    def test_filters_by_user_id(self, memory):
         memory.remember_conversation("mine", "yes", user_id="u1")
         memory.remember_conversation("theirs", "no", user_id="u2")
+        texts = [r["text"] for r in memory.recall("anything", user_id="u1")]
+        assert texts == ["user: mine\nassistant: yes"]
 
-        results = memory.recall("anything", user_id="u1")
-        assert len(results) == 1
-        assert "mine" in results[0]["text"]
-
-    def test_default_top_k_is_five(self, store, embedder):
-        for i in range(10):
-            store.rows.append({"id": str(i), "text": f"m{i}", "metadata": {"user_id": "u1"}})
-        memory = LongTermMemory(store, embedder, IdentityChunker())
+    def test_default_top_k_is_five(self, memory):
+        for i in range(8):
+            memory.remember_conversation(f"q{i}", f"a{i}", user_id="u1")
         assert len(memory.recall("q", user_id="u1")) == 5
 
-    def test_custom_top_k(self, store, embedder):
-        for i in range(10):
-            store.rows.append({"id": str(i), "text": f"m{i}", "metadata": {"user_id": "u1"}})
-        memory = LongTermMemory(store, embedder, IdentityChunker())
+    def test_custom_top_k(self, memory):
+        for i in range(8):
+            memory.remember_conversation(f"q{i}", f"a{i}", user_id="u1")
         assert len(memory.recall("q", user_id="u1", top_k=2)) == 2
 
-    def test_returns_the_text_metadata_score_shape(self, memory, store):
-        """build_agentic_system_prompt() reads r["text"] from each result."""
-        memory.remember_conversation("Q", "A", user_id="u1")
-        result = memory.recall("q", user_id="u1")[0]
-        assert set(result) == {"text", "metadata", "score"}
+    def test_returns_the_text_metadata_score_shape(self, memory):
+        """The prompt builder and the agent tool read exactly these keys."""
+        memory.remember_conversation("hi", "hello", user_id="u1")
+        hit = memory.recall("hi", user_id="u1")[0]
+        assert set(hit) == {"text", "metadata", "score"}
+        assert isinstance(hit["score"], float)
 
     def test_no_memories_returns_empty_list(self, memory):
-        assert memory.recall("q", user_id="nobody") == []
+        assert memory.recall("anything", user_id="nobody") == []
 
     def test_recall_round_trips_a_remembered_conversation(self, memory):
-        memory.remember_conversation("I work as a data engineer", "Noted", user_id="u1")
-        assert "data engineer" in memory.recall("job", user_id="u1")[0]["text"]
+        memory.remember_conversation("I am a pilot", "noted", user_id="u1")
+        assert memory.recall("I am a pilot", user_id="u1")[0]["text"].startswith("user: I am a pilot")
+
+    def test_closest_memory_comes_first(self, memory):
+        memory.remember_conversation("unrelated topic entirely", "ok", user_id="u1")
+        memory.remember_conversation("exact phrase", "ok", user_id="u1")
+        # FakeEmbedder is deterministic, so the identical text is the nearest.
+        top = memory.recall("user: exact phrase\nassistant: ok", user_id="u1")[0]
+        assert "exact phrase" in top["text"]
 
 
 class TestForgetUser:
-    def test_deletes_by_user_filter(self, memory, store):
+    def test_removes_only_that_users_rows(self, memory):
+        memory.remember_conversation("a", "b", user_id="u1")
+        memory.remember_conversation("c", "d", user_id="u2")
         memory.forget_user("u1")
-        assert store.deleted_filters == [{"user_id": "u1"}]
-
-    def test_removes_only_that_users_rows(self, memory, store):
-        memory.remember_conversation("mine", "a", user_id="u1")
-        memory.remember_conversation("theirs", "b", user_id="u2")
-
-        memory.forget_user("u1")
-        assert [r["metadata"]["user_id"] for r in store.rows] == ["u2"]
+        assert [r["metadata"]["user_id"] for r in all_rows(memory)] == ["u2"]
 
     def test_recall_finds_nothing_after_forgetting(self, memory):
-        memory.remember_conversation("Q", "A", user_id="u1")
+        memory.remember_conversation("a", "b", user_id="u1")
         memory.forget_user("u1")
-        assert memory.recall("q", user_id="u1") == []
+        assert memory.recall("a", user_id="u1") == []
+
+    def test_forgetting_an_unknown_user_is_a_no_op(self, memory):
+        memory.remember_conversation("a", "b", user_id="u1")
+        memory.forget_user("ghost")
+        assert len(all_rows(memory)) == 1
 
 
 class TestIdGeneration:
     def test_ids_are_prefixed_with_the_user(self, memory):
-        assert memory._build_id("u1").startswith("u1-")
+        memory.remember_conversation("a", "b", user_id="u1")
+        assert all_rows(memory)[0]["id"].startswith("u1-")
 
-    def test_ids_are_unique_across_calls(self, memory, store):
-        """Colliding ids would make each new turn overwrite the previous one."""
-        for i in range(20):
-            memory.remember_conversation(f"Q{i}", f"A{i}", user_id="u1")
-        assert len({r["id"] for r in store.rows}) == 20
+    def test_ids_are_unique_across_calls(self, memory):
+        for _ in range(5):
+            memory.remember_conversation("same", "same", user_id="u1")
+        ids = [r["id"] for r in all_rows(memory)]
+        assert len(set(ids)) == 5
+
+    def test_chunks_of_one_remember_call_get_distinct_ids(self, conversation_store):
+        splitter = CharacterTextSplitter(separator=". ", chunk_size=20, chunk_overlap=0)
+        memory = LongTermMemory(conversation_store, text_splitter=splitter)
+        memory.remember("First fact here. Second fact here. Third fact here.", user_id="u1")
+        ids = [r["id"] for r in all_rows(memory)]
+        assert len(set(ids)) == 3

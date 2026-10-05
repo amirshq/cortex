@@ -1,378 +1,150 @@
-"""Tests for the RAG vector stores and their provider factory.
+"""Tests for the RAG vector store factory and reset.
 
-The load-bearing test in this file is the Azure→Chroma response-shape
-translation. retrieval.py's _retrieve() indexes into result["ids"][0],
-["documents"][0], ["metadatas"][0], ["distances"][0] regardless of which
-backend produced them. If AzureSearchVectorStore.query() ever stops
-matching that nested-list shape, RAG breaks at runtime on Azure only —
-silently returning zero chunks rather than raising.
+cortex-core had to test its own Chroma/Azure adapters, including the
+Azure→Chroma response-shape translation retrieval.py depended on. With
+LangChain's VectorStore interface both backends return (Document, score)
+pairs natively, so that translation layer (and its tests) are gone.
 
-The Azure SDK is imported lazily inside AzureSearchVectorStore, so these
-tests inject fake SDK modules into sys.modules instead of requiring
-azure-search-documents to be installed.
+Chroma is exercised for real (in-process, tmp_path). Azure is mocked at the
+class boundary — its constructor would call the service.
 """
 
 from __future__ import annotations
 
-import sys
-import types
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
+from langchain_chroma import Chroma
+from langchain_core.documents import Document
 
 from src.business.rag.vector_store import (
-    ChromaVectorStore,
-    VectorStore,
-    VectorStoreBase,
+    DEFAULT_AZURE_INDEX,
     create_vector_store,
+    reset_vector_store,
 )
 
 
-# ---------------------------------------------------------------------------
-# Interface
-# ---------------------------------------------------------------------------
-class TestVectorStoreInterface:
-    def test_cannot_instantiate_abstract_base(self):
-        with pytest.raises(TypeError):
-            VectorStoreBase()
-
-    def test_subclass_must_implement_all_three_methods(self):
-        class Incomplete(VectorStoreBase):
-            def reset(self): ...
-
-        with pytest.raises(TypeError):
-            Incomplete()
-
-    def test_backward_compat_alias_points_at_chroma(self):
-        assert VectorStore is ChromaVectorStore
+@pytest.fixture(autouse=True)
+def clean_env(monkeypatch):
+    for name in ("VECTOR_STORE_PROVIDER", "AZURE_SEARCH_ENDPOINT", "AZURE_SEARCH_API_KEY",
+                 "AZURE_SEARCH_INDEX_NAME", "AZURE_SEARCH_EMBEDDING_DIM"):
+        monkeypatch.delenv(name, raising=False)
 
 
-# ---------------------------------------------------------------------------
-# Chroma
-# ---------------------------------------------------------------------------
-class TestChromaVectorStore:
-    def _store(self, tmp_path):
-        with patch("src.business.rag.vector_store.chromadb") as chroma:
-            client = MagicMock()
-            collection = MagicMock()
-            collection.name = "pdf_chunks"
-            client.get_or_create_collection.return_value = collection
-            chroma.PersistentClient.return_value = client
-            store = ChromaVectorStore(persist_dir=str(tmp_path))
-        return store, client, collection
-
-    def test_creates_collection_without_embedding_function(self, tmp_path):
-        """We supply embeddings manually; letting Chroma pick its own would
-        silently embed with a different model than the query side uses."""
-        _, client, _ = self._store(tmp_path)
-        assert client.get_or_create_collection.call_args.kwargs["embedding_function"] is None
-
-    def test_upsert_forwards_all_four_parallel_lists(self, tmp_path):
-        store, _, collection = self._store(tmp_path)
-        store.upsert(ids=["a"], embeddings=[[0.1]], metadatas=[{"k": "v"}], documents=["text"])
-
-        kwargs = collection.upsert.call_args.kwargs
-        assert kwargs["ids"] == ["a"]
-        assert kwargs["embeddings"] == [[0.1]]
-        assert kwargs["documents"] == ["text"]
-
-    def test_upsert_rejects_mismatched_lengths(self, tmp_path):
-        """A silent zip() truncation here would drop chunks from the index."""
-        store, _, _ = self._store(tmp_path)
-        with pytest.raises(ValueError, match="length mismatch"):
-            store.upsert(ids=["a", "b"], embeddings=[[0.1]], metadatas=[{}], documents=["t"])
-
-    def test_query_requests_documents_metadatas_and_distances(self, tmp_path):
-        """_retrieve() reads all three; omitting any breaks RetrievedChunk."""
-        store, _, collection = self._store(tmp_path)
-        store.query([0.1, 0.2], top_k=5)
-
-        kwargs = collection.query.call_args.kwargs
-        assert kwargs["n_results"] == 5
-        assert set(kwargs["include"]) == {"documents", "metadatas", "distances"}
-
-    def test_query_wraps_the_embedding_in_a_batch_list(self, tmp_path):
-        store, _, collection = self._store(tmp_path)
-        store.query([0.1, 0.2])
-        assert collection.query.call_args.kwargs["query_embeddings"] == [[0.1, 0.2]]
-
-    def test_reset_deletes_then_recreates_the_collection(self, tmp_path):
-        store, client, _ = self._store(tmp_path)
-        store.reset()
-        client.delete_collection.assert_called_once_with("pdf_chunks")
-        assert client.get_or_create_collection.call_count == 2
-
-
-# ---------------------------------------------------------------------------
-# Azure AI Search
-# ---------------------------------------------------------------------------
 @pytest.fixture
-def fake_azure_sdk(monkeypatch):
-    """Install a minimal fake azure-search-documents into sys.modules."""
-
-    class ResourceNotFoundError(Exception):
-        pass
-
-    def passthrough(*args, **kwargs):
-        return MagicMock()
-
-    index_client = MagicMock()
-    search_client = MagicMock()
-
-    modules = {
-        "azure": types.ModuleType("azure"),
-        "azure.core": types.ModuleType("azure.core"),
-        "azure.core.credentials": types.ModuleType("azure.core.credentials"),
-        "azure.core.exceptions": types.ModuleType("azure.core.exceptions"),
-        "azure.search": types.ModuleType("azure.search"),
-        "azure.search.documents": types.ModuleType("azure.search.documents"),
-        "azure.search.documents.indexes": types.ModuleType("azure.search.documents.indexes"),
-        "azure.search.documents.indexes.models": types.ModuleType("azure.search.documents.indexes.models"),
-        "azure.search.documents.models": types.ModuleType("azure.search.documents.models"),
-    }
-    modules["azure.core.credentials"].AzureKeyCredential = passthrough
-    modules["azure.core.exceptions"].ResourceNotFoundError = ResourceNotFoundError
-    modules["azure.search.documents"].SearchClient = lambda **kw: search_client
-    modules["azure.search.documents.indexes"].SearchIndexClient = lambda **kw: index_client
-
-    models = modules["azure.search.documents.indexes.models"]
-    for name in ("HnswAlgorithmConfiguration", "SearchField", "SearchIndex",
-                 "SimpleField", "VectorSearch", "VectorSearchProfile"):
-        setattr(models, name, passthrough)
-    models.SearchFieldDataType = types.SimpleNamespace(STRING="Edm.String", INT32="Edm.Int32")
-    modules["azure.search.documents.models"].VectorizedQuery = passthrough
-
-    for name, module in modules.items():
-        monkeypatch.setitem(sys.modules, name, module)
-
-    return types.SimpleNamespace(
-        index_client=index_client,
-        search_client=search_client,
-        ResourceNotFoundError=ResourceNotFoundError,
-    )
+def azure_env(monkeypatch):
+    monkeypatch.setenv("AZURE_SEARCH_ENDPOINT", "https://example.invalid")
+    monkeypatch.setenv("AZURE_SEARCH_API_KEY", "search-key")
 
 
-def make_azure_store(fake_azure_sdk, **kwargs):
-    from src.business.rag.vector_store import AzureSearchVectorStore
-    return AzureSearchVectorStore(
-        endpoint="https://example.search.windows.net",
-        api_key="key",
-        **kwargs,
-    )
-
-
-class TestAzureSearchVectorStore:
-    def test_creates_the_index_when_missing(self, fake_azure_sdk):
-        fake_azure_sdk.index_client.get_index.side_effect = fake_azure_sdk.ResourceNotFoundError()
-        make_azure_store(fake_azure_sdk)
-        fake_azure_sdk.index_client.create_index.assert_called_once()
-
-    def test_does_not_recreate_an_existing_index(self, fake_azure_sdk):
-        fake_azure_sdk.index_client.get_index.return_value = MagicMock()
-        make_azure_store(fake_azure_sdk)
-        fake_azure_sdk.index_client.create_index.assert_not_called()
-
-    def test_reset_drops_then_recreates(self, fake_azure_sdk):
-        """Must match ChromaVectorStore.reset()'s wipe-to-empty semantics."""
-        fake_azure_sdk.index_client.get_index.return_value = MagicMock()
-        store = make_azure_store(fake_azure_sdk)
-        store.reset()
-        fake_azure_sdk.index_client.delete_index.assert_called_once()
-        fake_azure_sdk.index_client.create_index.assert_called_once()
-
-    def test_reset_tolerates_a_missing_index(self, fake_azure_sdk):
-        fake_azure_sdk.index_client.get_index.return_value = MagicMock()
-        store = make_azure_store(fake_azure_sdk)
-        fake_azure_sdk.index_client.delete_index.side_effect = fake_azure_sdk.ResourceNotFoundError()
-        store.reset()
-        fake_azure_sdk.index_client.create_index.assert_called_once()
-
-    def test_upsert_rejects_mismatched_lengths(self, fake_azure_sdk):
-        fake_azure_sdk.index_client.get_index.return_value = MagicMock()
-        store = make_azure_store(fake_azure_sdk)
-        with pytest.raises(ValueError, match="length mismatch"):
-            store.upsert(ids=["a", "b"], embeddings=[[0.1]], metadatas=[{}], documents=["t"])
-
-    def test_upsert_flattens_metadata_into_index_fields(self, fake_azure_sdk):
-        """Azure has a flat schema — Chroma's nested metadata dict must be
-        spread across typed top-level fields."""
-        fake_azure_sdk.index_client.get_index.return_value = MagicMock()
-        store = make_azure_store(fake_azure_sdk)
-        store.upsert(
-            ids=["c1"],
-            embeddings=[[0.1, 0.2]],
-            metadatas=[{"source_id": "doc.pdf", "section": "table",
-                        "chunk_start": 100, "chunk_end": 900,
-                        "chunk_strategy": "char_window"}],
-            documents=["chunk text"],
-        )
-        doc = fake_azure_sdk.search_client.merge_or_upload_documents.call_args.kwargs["documents"][0]
-        assert doc["id"] == "c1"
-        assert doc["content"] == "chunk text"
-        assert doc["source_id"] == "doc.pdf"
-        assert doc["section"] == "table"
-        assert doc["chunk_start"] == 100
-
-    def test_upsert_defaults_missing_metadata_fields(self, fake_azure_sdk):
-        """Azure rejects a document missing a declared field; Chroma doesn't
-        care. Absent keys must become typed zero-values, not KeyErrors."""
-        fake_azure_sdk.index_client.get_index.return_value = MagicMock()
-        store = make_azure_store(fake_azure_sdk)
-        store.upsert(ids=["c1"], embeddings=[[0.1]], metadatas=[{}], documents=["t"])
-
-        doc = fake_azure_sdk.search_client.merge_or_upload_documents.call_args.kwargs["documents"][0]
-        assert doc["source_id"] == ""
-        assert doc["chunk_start"] == 0
-
-    def test_upsert_tolerates_none_metadata(self, fake_azure_sdk):
-        fake_azure_sdk.index_client.get_index.return_value = MagicMock()
-        store = make_azure_store(fake_azure_sdk)
-        store.upsert(ids=["c1"], embeddings=[[0.1]], metadatas=[None], documents=["t"])
-        assert fake_azure_sdk.search_client.merge_or_upload_documents.called
-
-
-class TestAzureToChromaShapeTranslation:
-    """THE contract test: Azure's flat rows → Chroma's nested-list dict.
-
-    retrieval.py::_retrieve() does result.get("ids", [[]])[0] on whatever
-    the store returns. Break this shape and RAG-on-Azure returns zero
-    chunks with no error — the LLM then answers from nothing.
-    """
-
-    def _query(self, fake_azure_sdk, rows):
-        fake_azure_sdk.index_client.get_index.return_value = MagicMock()
-        store = make_azure_store(fake_azure_sdk)
-        fake_azure_sdk.search_client.search.return_value = iter(rows)
-        return store.query([0.1, 0.2], top_k=5)
-
-    def test_returns_the_four_chroma_keys(self, fake_azure_sdk):
-        result = self._query(fake_azure_sdk, [])
-        assert set(result) == {"ids", "documents", "metadatas", "distances"}
-
-    def test_every_value_is_wrapped_in_an_outer_batch_list(self, fake_azure_sdk):
-        """Chroma's outer list is the batch dimension. _retrieve() indexes
-        [0] into all four — a flat list would yield a single character."""
-        rows = [{"id": "c1", "content": "text", "@search.score": 0.9}]
-        result = self._query(fake_azure_sdk, rows)
-        for key in ("ids", "documents", "metadatas", "distances"):
-            assert isinstance(result[key], list), key
-            assert isinstance(result[key][0], list), key
-
-    def test_retrieval_can_unpack_the_azure_response(self, fake_azure_sdk):
-        """End-to-end proof: feed Azure's output through _retrieve()'s
-        actual unpacking code and assert real chunks come out."""
-        rows = [
-            {"id": "c1", "content": "first", "source_id": "d.pdf", "section": "text",
-             "chunk_start": 0, "chunk_end": 800, "chunk_strategy": "cw", "@search.score": 0.9},
-            {"id": "c2", "content": "second", "source_id": "d.pdf", "section": "table",
-             "chunk_start": 700, "chunk_end": 1500, "chunk_strategy": "cw", "@search.score": 0.7},
-        ]
-        result = self._query(fake_azure_sdk, rows)
-
-        ids = result.get("ids", [[]])[0]
-        docs = result.get("documents", [[]])[0]
-        metas = result.get("metadatas", [[]])[0]
-        dists = result.get("distances", [[]])[0]
-
-        assert ids == ["c1", "c2"]
-        assert docs == ["first", "second"]
-        assert len(list(zip(ids, docs, metas, dists))) == 2
-        assert metas[0]["source_id"] == "d.pdf"
-        assert metas[1]["section"] == "table"
-
-    def test_similarity_score_is_negated_into_a_distance(self, fake_azure_sdk):
-        """Azure scores are higher-is-better; Chroma distances are
-        lower-is-better. Without the sign flip the ordering semantics
-        invert between backends."""
-        rows = [{"id": "c1", "content": "t", "@search.score": 0.9},
-                {"id": "c2", "content": "t", "@search.score": 0.4}]
-        result = self._query(fake_azure_sdk, rows)
-
-        assert result["distances"][0] == [-0.9, -0.4]
-        assert result["distances"][0][0] < result["distances"][0][1]
-
-    def test_missing_score_defaults_to_zero(self, fake_azure_sdk):
-        result = self._query(fake_azure_sdk, [{"id": "c1", "content": "t"}])
-        assert result["distances"][0] == [0.0]
-
-    def test_missing_content_becomes_empty_string(self, fake_azure_sdk):
-        result = self._query(fake_azure_sdk, [{"id": "c1", "@search.score": 0.5}])
-        assert result["documents"][0] == [""]
-
-    def test_metadata_carries_only_the_declared_index_fields(self, fake_azure_sdk):
-        from src.business.rag.vector_store import AzureSearchVectorStore
-        rows = [{"id": "c1", "content": "t", "source_id": "d", "@search.score": 0.5,
-                 "unexpected_field": "should not leak"}]
-        result = self._query(fake_azure_sdk, rows)
-        assert set(result["metadatas"][0][0]) == set(AzureSearchVectorStore.INDEX_FIELDS_METADATA_KEYS)
-
-    def test_empty_result_set_yields_empty_inner_lists(self, fake_azure_sdk):
-        """Must be [[]] not [] — _retrieve() would still index [0]."""
-        result = self._query(fake_azure_sdk, [])
-        assert result["ids"] == [[]]
-        assert result.get("ids", [[]])[0] == []
-
-
-# ---------------------------------------------------------------------------
-# Factory
-# ---------------------------------------------------------------------------
 class TestCreateVectorStoreFactory:
-    def test_default_provider_is_chroma(self, monkeypatch, tmp_path):
-        monkeypatch.delenv("VECTOR_STORE_PROVIDER", raising=False)
-        with patch("src.business.rag.vector_store.ChromaVectorStore") as chroma:
-            create_vector_store(persist_dir=str(tmp_path))
-        chroma.assert_called_once()
+    def test_default_provider_is_chroma(self, tmp_path, fake_embedder):
+        assert isinstance(create_vector_store(str(tmp_path), embedding=fake_embedder), Chroma)
 
-    def test_env_var_selects_the_provider(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("VECTOR_STORE_PROVIDER", "chroma")
-        with patch("src.business.rag.vector_store.ChromaVectorStore") as chroma:
-            create_vector_store(persist_dir=str(tmp_path))
-        chroma.assert_called_once()
-
-    def test_parameter_overrides_env_var(self, monkeypatch, tmp_path):
+    def test_env_var_selects_the_provider(self, tmp_path, fake_embedder, monkeypatch, azure_env):
         monkeypatch.setenv("VECTOR_STORE_PROVIDER", "azure_search")
-        with patch("src.business.rag.vector_store.ChromaVectorStore") as chroma:
-            create_vector_store(persist_dir=str(tmp_path), provider="chroma")
-        chroma.assert_called_once()
+        with patch("langchain_azure_ai.vectorstores.AzureSearch") as azure:
+            assert create_vector_store(str(tmp_path), embedding=fake_embedder) is azure.return_value
 
-    def test_provider_name_is_case_insensitive(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("VECTOR_STORE_PROVIDER", "  CHROMA  ")
-        with patch("src.business.rag.vector_store.ChromaVectorStore") as chroma:
-            create_vector_store(persist_dir=str(tmp_path))
-        chroma.assert_called_once()
-
-    def test_azure_requires_endpoint_and_key(self, monkeypatch, tmp_path):
+    def test_parameter_overrides_env_var(self, tmp_path, fake_embedder, monkeypatch):
         monkeypatch.setenv("VECTOR_STORE_PROVIDER", "azure_search")
-        monkeypatch.delenv("AZURE_SEARCH_ENDPOINT", raising=False)
-        monkeypatch.delenv("AZURE_SEARCH_API_KEY", raising=False)
-        with pytest.raises(RuntimeError, match="AZURE_SEARCH_ENDPOINT"):
-            create_vector_store(persist_dir=str(tmp_path))
+        assert isinstance(create_vector_store(str(tmp_path), provider="chroma", embedding=fake_embedder), Chroma)
 
-    def test_azure_uses_configured_index_and_dim(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("VECTOR_STORE_PROVIDER", "azure_search")
-        monkeypatch.setenv("AZURE_SEARCH_ENDPOINT", "https://e.search.windows.net")
-        monkeypatch.setenv("AZURE_SEARCH_API_KEY", "k")
-        monkeypatch.setenv("AZURE_SEARCH_INDEX_NAME", "custom-index")
-        monkeypatch.setenv("AZURE_SEARCH_EMBEDDING_DIM", "3072")
+    def test_provider_name_is_case_insensitive(self, tmp_path, fake_embedder):
+        assert isinstance(create_vector_store(str(tmp_path), provider=" Chroma ", embedding=fake_embedder), Chroma)
 
-        with patch("src.business.rag.vector_store.AzureSearchVectorStore") as azure:
-            create_vector_store(persist_dir=str(tmp_path))
-
-        kwargs = azure.call_args.kwargs
-        assert kwargs["index_name"] == "custom-index"
-        assert kwargs["dim"] == 3072
-
-    def test_azure_dim_defaults_to_1536(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("VECTOR_STORE_PROVIDER", "azure_search")
-        monkeypatch.setenv("AZURE_SEARCH_ENDPOINT", "https://e.search.windows.net")
-        monkeypatch.setenv("AZURE_SEARCH_API_KEY", "k")
-        monkeypatch.delenv("AZURE_SEARCH_EMBEDDING_DIM", raising=False)
-
-        with patch("src.business.rag.vector_store.AzureSearchVectorStore") as azure:
-            create_vector_store(persist_dir=str(tmp_path))
-        assert azure.call_args.kwargs["dim"] == 1536
-
-    def test_unknown_provider_raises(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("VECTOR_STORE_PROVIDER", "pinecone")
+    def test_unknown_provider_raises(self, tmp_path, fake_embedder):
         with pytest.raises(ValueError, match="Unknown VECTOR_STORE_PROVIDER"):
-            create_vector_store(persist_dir=str(tmp_path))
+            create_vector_store(str(tmp_path), provider="pinecone", embedding=fake_embedder)
+
+    def test_default_embedding_comes_from_the_embedding_factory(self, tmp_path, fake_embedder):
+        with patch("src.business.core.embedding.create_embedder", return_value=fake_embedder) as factory:
+            store = create_vector_store(str(tmp_path))
+        factory.assert_called_once_with()
+        assert store.embeddings is fake_embedder
+
+    def test_azure_requires_endpoint_and_key(self, tmp_path, fake_embedder):
+        with pytest.raises(RuntimeError, match="AZURE_SEARCH_ENDPOINT"):
+            create_vector_store(str(tmp_path), provider="azure_search", embedding=fake_embedder)
+
+    def test_azure_uses_configured_index_and_dim(self, tmp_path, fake_embedder, monkeypatch, azure_env):
+        monkeypatch.setenv("AZURE_SEARCH_INDEX_NAME", "my-index")
+        monkeypatch.setenv("AZURE_SEARCH_EMBEDDING_DIM", "3072")
+        with patch("langchain_azure_ai.vectorstores.AzureSearch") as azure:
+            create_vector_store(str(tmp_path), provider="azure_search", embedding=fake_embedder)
+        kwargs = azure.call_args.kwargs
+        assert kwargs["azure_search_endpoint"] == "https://example.invalid"
+        assert kwargs["azure_search_key"] == "search-key"
+        assert kwargs["index_name"] == "my-index"
+        assert kwargs["vector_search_dimensions"] == 3072
+        assert kwargs["embedding_function"] is fake_embedder
+
+    def test_azure_defaults(self, tmp_path, fake_embedder, azure_env):
+        """Default index name differs from cortex-core's "rag-chunks" on purpose:
+        LangChain's AzureSearch schema is not compatible with that index."""
+        with patch("langchain_azure_ai.vectorstores.AzureSearch") as azure:
+            create_vector_store(str(tmp_path), provider="azure_search", embedding=fake_embedder)
+        assert azure.call_args.kwargs["index_name"] == DEFAULT_AZURE_INDEX != "rag-chunks"
+        # Passing the dim up front stops AzureSearch from paying for a probe embedding.
+        assert azure.call_args.kwargs["vector_search_dimensions"] == 1536
+
+
+class TestChromaRoundTrip:
+    """The contract retrieval.py relies on, exercised against real Chroma."""
+
+    def test_add_then_search_returns_documents_with_distances(self, tmp_path, fake_embedder):
+        store = create_vector_store(str(tmp_path), embedding=fake_embedder)
+        store.add_documents([Document(page_content="alpha", metadata={"source_id": "a.pdf"})], ids=["c1"])
+
+        (hit, distance), = store.similarity_search_with_score("alpha", k=1)
+        assert hit.page_content == "alpha"
+        assert hit.metadata == {"source_id": "a.pdf"}
+        assert hit.id == "c1"
+        assert distance == pytest.approx(0.0, abs=1e-6)
+
+    def test_re_adding_the_same_id_upserts(self, tmp_path, fake_embedder):
+        """Stable chunk ids make re-indexing idempotent."""
+        store = create_vector_store(str(tmp_path), embedding=fake_embedder)
+        store.add_documents([Document(page_content="v1")], ids=["c1"])
+        store.add_documents([Document(page_content="v2")], ids=["c1"])
+        assert store.get()["documents"] == ["v2"]
+
+    def test_persists_across_instances(self, tmp_path, fake_embedder):
+        create_vector_store(str(tmp_path), embedding=fake_embedder).add_documents(
+            [Document(page_content="kept")], ids=["c1"])
+        assert create_vector_store(str(tmp_path), embedding=fake_embedder).get()["documents"] == ["kept"]
+
+
+class TestResetVectorStore:
+    def test_chroma_reset_empties_the_collection(self, tmp_path, fake_embedder):
+        store = create_vector_store(str(tmp_path), embedding=fake_embedder)
+        store.add_documents([Document(page_content="stale")], ids=["c1"])
+
+        reset_vector_store(str(tmp_path))
+
+        assert create_vector_store(str(tmp_path), embedding=fake_embedder).get()["ids"] == []
+
+    def test_chroma_reset_on_an_empty_directory_is_fine(self, tmp_path):
+        reset_vector_store(str(tmp_path / "never-used"))
+
+    def test_chroma_reset_leaves_other_collections_alone(self, tmp_path, fake_embedder):
+        other = create_vector_store(str(tmp_path), collection_name="other", embedding=fake_embedder)
+        other.add_documents([Document(page_content="keep me")], ids=["k1"])
+        reset_vector_store(str(tmp_path))
+        assert other.get()["documents"] == ["keep me"]
+
+    def test_azure_reset_drops_the_index(self, azure_env):
+        with patch("azure.search.documents.indexes.SearchIndexClient") as client_cls:
+            reset_vector_store("unused", provider="azure_search")
+        client_cls.return_value.delete_index.assert_called_once_with(DEFAULT_AZURE_INDEX)
+
+    def test_azure_reset_tolerates_a_missing_index(self, azure_env):
+        from azure.core.exceptions import ResourceNotFoundError
+
+        with patch("azure.search.documents.indexes.SearchIndexClient") as client_cls:
+            client_cls.return_value.delete_index.side_effect = ResourceNotFoundError("gone")
+            reset_vector_store("unused", provider="azure_search")
+
+    def test_reset_unknown_provider_raises(self):
+        with pytest.raises(ValueError, match="Unknown VECTOR_STORE_PROVIDER"):
+            reset_vector_store("unused", provider="pinecone")

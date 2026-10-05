@@ -116,7 +116,11 @@ class TestRagQueryRoute:
         response = client.post("/api/v1/rag/query", json={"question": "How long is the warranty?"})
 
         assert response.status_code == 200
-        rag_query_business.assert_awaited_once_with("How long is the warranty?")
+        rag_query_business.assert_awaited_once_with("How long is the warranty?", user_id=None)
+
+    def test_user_id_is_passed_on_so_the_answer_is_saved(self, client, rag_query_business):
+        client.post("/api/v1/rag/query", json={"question": "Q?", "user_id": 7})
+        rag_query_business.assert_awaited_once_with("Q?", user_id="7")
 
     def test_answer_and_sources_are_returned_intact(self, client, rag_query_business):
         body = client.post("/api/v1/rag/query", json={"question": "How long is the warranty?"}).json()
@@ -160,9 +164,12 @@ class TestRouting:
         ("DELETE", "/api/v1/sessions/{session_id}"),
         ("POST", "/api/v1/rag/query"),
         ("POST", "/api/v1/rag/upload"),
+        ("GET", "/api/v1/rag/documents"),
+        ("GET", "/api/v1/rag/history"),
+        ("DELETE", "/api/v1/rag/history"),
     }
 
-    def test_openapi_lists_exactly_the_six_versioned_operations(self, client):
+    def test_openapi_lists_exactly_the_versioned_operations(self, client):
         paths = client.get("/openapi.json").json()["paths"]
         versioned = {(method.upper(), path)
                      for path, operations in paths.items() if path.startswith("/api/v1")

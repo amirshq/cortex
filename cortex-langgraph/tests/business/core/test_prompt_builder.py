@@ -1,4 +1,4 @@
-"""Tests for prompt_builder — both the RAG PromptBuilder and the agentic one.
+"""Tests for prompt_builder — the RAG ChatPromptTemplate and the agentic prompt.
 
 Prompts are the least-tested and most behaviour-defining part of an LLM
 app: a dropped instruction here doesn't raise, it just makes the model
@@ -13,87 +13,110 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
+from langchain_core.documents import Document
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.prompts import ChatPromptTemplate
 
-from src.business.core.prompt_builder import PromptBuilder, build_agentic_system_prompt
+from src.business.core.prompt_builder import (
+    build_agentic_system_prompt,
+    build_rag_prompt,
+    format_context,
+)
+
+
+def render(system_prompt, question, chunks):
+    """Render the RAG template exactly as the generate node does."""
+    docs = [Document(page_content=c) for c in chunks]
+    return build_rag_prompt(system_prompt).invoke(
+        {"question": question, "context": format_context(docs)}
+    ).to_messages()
 
 
 # ---------------------------------------------------------------------------
-# RAG prompt builder
+# RAG prompt template
 # ---------------------------------------------------------------------------
-class TestPromptBuilderInit:
+class TestBuildRagPrompt:
+    def test_is_a_chat_prompt_template(self):
+        """A Runnable, so the RAG graph can compose it: prompt | llm | parser."""
+        assert isinstance(build_rag_prompt("sys"), ChatPromptTemplate)
+
+    def test_only_question_and_context_are_left_to_fill(self):
+        """The system prompt is bound up front with .partial()."""
+        assert set(build_rag_prompt("sys").input_variables) == {"question", "context"}
+
     def test_custom_system_prompt_is_used(self):
-        assert PromptBuilder("You are a pirate.").system_prompt == "You are a pirate."
+        assert render("You are a pirate.", "q", [])[0].content == "You are a pirate."
 
     def test_falls_back_to_config_when_none(self):
-        assert PromptBuilder().system_prompt
+        assert render(None, "q", [])[0].content
+
+    def test_default_system_role_is_the_configured_one(self):
+        """Regression: a duplicate `llm_config:` key in config.yml used to wipe
+        the configured role, so the RAG prompt silently fell back to the
+        generic "You are a helpful assistant."."""
+        from src.utils.config import load_config
+
+        configured = load_config()["prompts"]["rag_system_role"]
+        assert render(None, "q", [])[0].content == configured
+        assert configured != "You are a helpful assistant."
+
+    def test_changing_the_config_changes_the_system_role(self, override_config):
+        override_config({"prompts": {"rag_system_role": "You are a terse librarian."}})
+        assert render(None, "q", [])[0].content == "You are a terse librarian."
 
     def test_empty_string_falls_back_to_config(self):
-        assert PromptBuilder("").system_prompt
+        assert render("", "q", [])[0].content
 
 
-class TestBuildPromptText:
-    def test_includes_the_question(self):
-        assert "What is X?" in PromptBuilder("sys").build_prompt_text("What is X?", ["ctx"])
+class TestRenderedRagMessages:
+    def test_returns_system_then_human(self):
+        messages = render("sys", "q", ["c"])
+        assert [type(m) for m in messages] == [SystemMessage, HumanMessage]
+
+    def test_human_message_carries_question_and_context(self):
+        human = render("sys", "What is X?", ["relevant chunk"])[1].content
+        assert "What is X?" in human and "relevant chunk" in human
 
     def test_includes_every_context_chunk(self):
-        prompt = PromptBuilder("sys").build_prompt_text("q", ["alpha", "beta", "gamma"])
-        assert "alpha" in prompt and "beta" in prompt and "gamma" in prompt
+        human = render("sys", "q", ["alpha", "beta", "gamma"])[1].content
+        assert "alpha" in human and "beta" in human and "gamma" in human
 
     def test_context_chunks_are_numbered_from_one(self):
         """Numbering lets the model cite which chunk it used."""
-        prompt = PromptBuilder("sys").build_prompt_text("q", ["a", "b"])
-        assert "[Context 1]" in prompt and "[Context 2]" in prompt
-
-    def test_includes_the_system_prompt(self):
-        assert "CUSTOM ROLE" in PromptBuilder("CUSTOM ROLE").build_prompt_text("q", [])
+        human = render("sys", "q", ["a", "b"])[1].content
+        assert "[Context 1]" in human and "[Context 2]" in human
 
     def test_carries_the_grounding_rules(self):
-        """These four rules ARE the hallucination guard for the RAG path.
+        """These rules ARE the hallucination guard for the RAG path.
 
         The re-ranker's min_score gate is the first firewall; this is the
         second. Losing them silently converts the RAG endpoint into an
         ungrounded chat endpoint.
         """
-        prompt = PromptBuilder("sys").build_prompt_text("q", ["ctx"])
-        assert "only on the provided context" in prompt
-        assert "I don't know." in prompt
-        assert "Do not invent information." in prompt
+        human = render("sys", "q", ["ctx"])[1].content
+        assert "only on the provided context" in human
+        assert "I don't know." in human
+        assert "Do not invent information." in human
 
     def test_empty_context_still_produces_a_prompt_with_the_rules(self):
-        """The fail-closed path sends no context — the "say I don't know"
-        instruction is what stops the model answering from memory."""
-        prompt = PromptBuilder("sys").build_prompt_text("q", [])
-        assert "I don't know." in prompt
+        """With no context the "say I don't know" instruction is what stops
+        the model answering from memory."""
+        assert "I don't know." in render("sys", "q", [])[1].content
 
-    def test_is_stripped(self):
-        prompt = PromptBuilder("sys").build_prompt_text("q", ["c"])
-        assert prompt == prompt.strip()
-
-    def test_build_prompt_alias_matches(self):
-        builder = PromptBuilder("sys")
-        assert builder.build_prompt("q", ["c"]) == builder.build_prompt_text("q", ["c"])
+    def test_braces_in_chunks_are_not_treated_as_template_variables(self):
+        """PDF text is full of `{` / `}` (code, JSON, formulas). Context is a
+        template VALUE, so it must be inserted verbatim, never parsed."""
+        human = render("sys", "q", ['{"key": "{value}"}'])[1].content
+        assert '{"key": "{value}"}' in human
 
 
-class TestBuildMessages:
-    def test_returns_system_then_user(self):
-        messages = PromptBuilder("sys").build_messages("q", ["c"])
-        assert [m["role"] for m in messages] == ["system", "user"]
+class TestFormatContext:
+    def test_numbers_chunks_from_one_in_order(self):
+        docs = [Document(page_content="a"), Document(page_content="b")]
+        assert format_context(docs) == "[Context 1]: a\n\n[Context 2]: b"
 
-    def test_system_message_is_the_system_prompt(self):
-        assert PromptBuilder("ROLE").build_messages("q", [])[0]["content"] == "ROLE"
-
-    def test_user_message_carries_question_and_context(self):
-        user = PromptBuilder("sys").build_messages("What is X?", ["relevant chunk"])[1]["content"]
-        assert "What is X?" in user and "relevant chunk" in user
-
-    def test_user_message_carries_the_grounding_rules(self):
-        user = PromptBuilder("sys").build_messages("q", ["c"])[1]["content"]
-        assert "only on the provided context" in user
-        assert "Do not invent information." in user
-
-    def test_context_numbering_matches_the_text_variant(self):
-        user = PromptBuilder("sys").build_messages("q", ["a", "b"])[1]["content"]
-        assert "[Context 1]" in user and "[Context 2]" in user
+    def test_empty_context_is_empty_string(self):
+        assert format_context([]) == ""
 
 
 # ---------------------------------------------------------------------------
@@ -186,3 +209,18 @@ class TestAgenticSystemPromptStructure:
 
     def test_returns_a_non_trivial_string(self):
         assert len(build_agentic_system_prompt({})) > 200
+
+
+class TestAgenticSystemPromptTemplateSafety:
+    def test_braces_in_user_data_are_inserted_verbatim(self):
+        """The prompt is now a PromptTemplate. Recalled conversations and
+        profile values are template VALUES — braces inside them must come
+        through untouched, not be parsed as variables."""
+        prompt = build_agentic_system_prompt(
+            {"bio": "writes {curly} code"},
+            vector_results=[{"text": 'user: parse {"a": 1}', "metadata": {}, "score": 0.1}],
+            chat_summary="summary with {braces}",
+        )
+        assert "writes {curly} code" in prompt
+        assert 'parse {"a": 1}' in prompt
+        assert "summary with {braces}" in prompt

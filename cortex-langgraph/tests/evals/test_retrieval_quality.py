@@ -15,7 +15,7 @@ from typing import List
 
 import pytest
 
-from tests.evals.conftest import retrieve_doc_ids
+from tests.evals.conftest import retrieve_doc_ids, retrieve_docs, select_context
 
 pytestmark = pytest.mark.eval
 
@@ -127,38 +127,18 @@ class TestVectorRetrievalQuality:
 class TestRerankerLift:
     """Does the cross-encoder improve on vector order — on the real path?
 
-    Important: production never calls ReRanker.re_rank() directly. It goes
-    through select_context(policy="hybrid"), which falls back to raw vector
-    order when the relevance gate rejects everything. Measuring re_rank()
-    alone would report failures the application recovers from, and would
-    miss that the recovery is happening at all.
+    Important: production never calls the re-ranker alone. The RAG graph
+    routes a fully-gated result to the fallback node, which uses raw vector
+    order. Measuring rerank_documents() alone would report failures the
+    application recovers from, and would miss that the recovery is happening
+    at all — so these run the real graph (with a no-op LLM).
     """
 
-    def _retrieved_chunks(self, store, embedder, question, top_k=5):
-        from src.business.rag.re_ranker.interface import RetrievedChunk
-
-        result = store.query(embedder.embed_query(question), top_k)
-        return [
-            RetrievedChunk(chunk_id=i, text=d, metadata=m or {},
-                           vector_score=float(s) if s is not None else 0.0)
-            for i, d, m, s in zip(result["ids"][0], result["documents"][0],
-                                  result["metadatas"][0], result["distances"][0])
-        ]
-
-    def _selected_ids(self, store, embedder, reranker, question):
-        """The production path: rerank, then hybrid fallback."""
-        from src.business.rag.re_ranker.orchestrator import select_context
-
-        chunks = self._retrieved_chunks(store, embedder, question)
-        selected, confidence = select_context(
-            query=question, retrieved_chunks=chunks, reranker=reranker, policy="hybrid")
-        return [c.chunk_id for c in selected], confidence
-
     def test_production_path_does_not_degrade_mrr(self, indexed_corpus, real_embedder,
-                                                  real_reranker, golden_set):
-        """MRR through select_context must not fall below vector-only.
+                                                  selection_pipeline, golden_set):
+        """MRR through the graph must not fall below vector-only.
 
-        The hybrid fallback exists precisely so that a bad re-ranking cannot
+        The fallback branch exists precisely so that a bad re-ranking cannot
         make the final answer worse than no re-ranking. If this fails, the
         fallback is not doing its job.
         """
@@ -169,36 +149,33 @@ class TestRerankerLift:
             relevant = case["relevant_doc_ids"]
             vector_rr.append(reciprocal_rank(
                 retrieve_doc_ids(indexed_corpus, real_embedder, case["question"], 5), relevant))
-            ids, _ = self._selected_ids(indexed_corpus, real_embedder,
-                                        real_reranker, case["question"])
+            ids, _ = select_context(selection_pipeline, case["question"])
             selected_rr.append(reciprocal_rank(ids, relevant))
 
         before = sum(vector_rr) / len(vector_rr)
         after = sum(selected_rr) / len(selected_rr)
-        print(f"\n  MRR vector-only      = {before:.3f}")
-        print(f"  MRR via select_context = {after:.3f}")
-        print(f"  lift                   = {after - before:+.3f}")
+        print(f"\n  MRR vector-only  = {before:.3f}")
+        print(f"  MRR via graph    = {after:.3f}")
+        print(f"  lift             = {after - before:+.3f}")
 
         assert after - before >= MIN_RERANKER_LIFT, (
             f"the full retrieval path scores {before - after:.3f} WORSE than raw "
-            f"vector order. The hybrid fallback should make this impossible — "
-            f"check select_context() and the gate."
+            f"vector order. The fallback branch should make this impossible — "
+            f"check the rerank node and the gate."
         )
 
-    def test_confidence_is_reported_per_case(self, indexed_corpus, real_embedder,
-                                             real_reranker, golden_set):
+    def test_confidence_is_reported_per_case(self, selection_pipeline, golden_set):
         """Diagnostic: how often does the gate reject everything?
 
         Each 'low' here is a query where the cross-encoder scored every
-        candidate below min_score and the system fell back to vector order.
+        candidate below min_score and the graph took the fallback branch.
         In production each one increments rag_retrieval_low_confidence_total.
         A rising count is the early warning that retrieval is degrading.
         """
         print()
         low = 0
         for case in golden_set["retrieval_cases"]:
-            ids, confidence = self._selected_ids(indexed_corpus, real_embedder,
-                                                 real_reranker, case["question"])
+            ids, confidence = select_context(selection_pipeline, case["question"])
             low += confidence == "low"
             hit = case["relevant_doc_ids"][0] in ids
             print(f"  [{confidence:4}] {'hit ' if hit else 'MISS'} {case['question'][:48]!r}")
@@ -211,13 +188,10 @@ class TestRerankerLift:
             f"scale note in TestRerankerGate."
         )
 
-    def test_gate_filters_the_irrelevant_distractor(self, indexed_corpus, real_embedder,
-                                                    real_reranker):
+    def test_gate_filters_the_irrelevant_distractor(self, selection_pipeline):
         """min_score is the first hallucination firewall: it should keep
         weakly-related chunks out of the prompt entirely."""
-        ids, confidence = self._selected_ids(
-            indexed_corpus, real_embedder, real_reranker,
-            "What was Veldrin's revenue in fiscal 2024?")
+        ids, confidence = select_context(selection_pipeline, "What was Veldrin's revenue in fiscal 2024?")
         print(f"\n  selected: {ids}  (confidence={confidence})")
         assert "veldrin-financials" in ids
         assert len(ids) < 5, "every candidate survived — the gate is not filtering"
@@ -226,7 +200,8 @@ class TestRerankerLift:
 class TestRerankerGate:
     """The min_score threshold and the scale it is applied to.
 
-    FINDING pinned by these tests: CrossEncoderReRanker._batch_score()
+    FINDING pinned by these tests (inherited unchanged from cortex-core, on
+    purpose — CrossEncoderScorer keeps raw logits for parity): the scorer
     returns the model's raw logits — unbounded, measured roughly in
     [-10, +10] on this corpus — but ReRankerConfig.min_score defaults to
     0.15 and is documented as a relevance threshold, a value that only
@@ -234,7 +209,7 @@ class TestRerankerGate:
 
     Applying 0.15 to a logit means the real gate is sigmoid(0.15) ~ 0.54,
     i.e. "at least 54% relevance probability" — roughly 3.5x stricter than
-    the config's own comment implies. The hybrid fallback stops that
+    the config's own comment implies. The fallback branch stops that
     causing wrong answers, but it converts precision gating into
     all-or-nothing: for an affected query the system silently reverts to
     unranked vector order.
@@ -245,25 +220,16 @@ class TestRerankerGate:
     """
 
     def _scores(self, store, embedder, reranker, question, top_k=5):
-        from src.business.rag.re_ranker.interface import RetrievedChunk
-
-        result = store.query(embedder.embed_query(question), top_k)
-        chunks = [
-            RetrievedChunk(chunk_id=i, text=d, metadata=m or {},
-                           vector_score=float(s) if s is not None else 0.0)
-            for i, d, m, s in zip(result["ids"][0], result["documents"][0],
-                                  result["metadatas"][0], result["distances"][0])
-        ]
-        return reranker.scorer.score(question, chunks)
+        docs = retrieve_docs(store, embedder, question, top_k)
+        return {d.id: s for d, s in zip(docs, reranker.scorer.score([(question, d.page_content) for d in docs]))}
 
     def test_scores_are_logits_not_probabilities(self, indexed_corpus, real_embedder,
                                                  real_reranker):
         """If these ever land inside [0, 1], the scorer started applying a
         sigmoid and min_score=0.15 suddenly means something completely
         different. That is a silent, behaviour-changing event."""
-        scored = self._scores(indexed_corpus, real_embedder, real_reranker,
-                              "What temperature range does the Kestrel-7 operate in?")
-        values = [c.rerank_score for c in scored]
+        values = list(self._scores(indexed_corpus, real_embedder, real_reranker,
+                                   "What temperature range does the Kestrel-7 operate in?").values())
         print(f"\n  rerank_score range: {min(values):.3f} .. {max(values):.3f}")
         assert min(values) < 0.0, (
             "all scores are non-negative — the scorer may now be emitting "
@@ -277,32 +243,24 @@ class TestRerankerGate:
         'What radio frequency does the sensor use in Europe?' retrieves the
         correct spec sheet at vector rank 1, but the cross-encoder scores it
         about -4.2 — below min_score — so the gate drops every candidate and
-        re_rank() returns []. The answer IS in the corpus; the gate simply
+        the re-ranker returns []. The answer IS in the corpus; the gate simply
         does not believe it.
 
-        Production survives this via the hybrid fallback (asserted in
-        TestRerankerLift). This test exists so that the underlying behaviour
-        is visible rather than hidden behind that recovery.
+        Production survives this via the fallback branch (asserted below and
+        in TestRerankerLift). This test exists so that the underlying
+        behaviour is visible rather than hidden behind that recovery.
         """
         question = "What radio frequency does the sensor use in Europe?"
-        vector_ids = retrieve_doc_ids(indexed_corpus, real_embedder, question, 5)
-        assert vector_ids[0] == "kestrel-specs", "vector search itself regressed"
+        docs = retrieve_docs(indexed_corpus, real_embedder, question, 5)
+        assert docs[0].id == "kestrel-specs", "vector search itself regressed"
 
-        from src.business.rag.re_ranker.interface import RetrievedChunk
-        result = indexed_corpus.query(real_embedder.embed_query(question), 5)
-        chunks = [
-            RetrievedChunk(chunk_id=i, text=d, metadata=m or {},
-                           vector_score=float(s) if s is not None else 0.0)
-            for i, d, m, s in zip(result["ids"][0], result["documents"][0],
-                                  result["metadatas"][0], result["distances"][0])
-        ]
-        gated = real_reranker.re_rank(question, chunks)
-        scored = {c.chunk_id: c.rerank_score for c in real_reranker.scorer.score(question, chunks)}
+        gated = real_reranker.re_rank(question, docs)
+        scored = self._scores(indexed_corpus, real_embedder, real_reranker, question)
 
-        print(f"\n  vector rank-1     : {vector_ids[0]}")
+        print(f"\n  vector rank-1     : {docs[0].id}")
         print(f"  its rerank_score  : {scored['kestrel-specs']:.4f}")
         print(f"  min_score gate    : {real_reranker.config.min_score}")
-        print(f"  survivors         : {[c.chunk_id for c in gated]}")
+        print(f"  survivors         : {[d.id for d in gated]}")
 
         assert gated == [], (
             "the gate no longer drops this case — if min_score or the scoring "
@@ -310,27 +268,15 @@ class TestRerankerGate:
             "MAX_LOW_CONFIDENCE_RATE"
         )
 
-    def test_fallback_recovers_the_gated_chunk(self, indexed_corpus, real_embedder,
-                                               real_reranker):
+    def test_fallback_recovers_the_gated_chunk(self, selection_pipeline):
         """The other half of the pair: what the user actually gets."""
-        from src.business.rag.re_ranker.orchestrator import select_context
-        from src.business.rag.re_ranker.interface import RetrievedChunk
-
-        question = "What radio frequency does the sensor use in Europe?"
-        result = indexed_corpus.query(real_embedder.embed_query(question), 5)
-        chunks = [
-            RetrievedChunk(chunk_id=i, text=d, metadata=m or {},
-                           vector_score=float(s) if s is not None else 0.0)
-            for i, d, m, s in zip(result["ids"][0], result["documents"][0],
-                                  result["metadatas"][0], result["distances"][0])
-        ]
         selected, confidence = select_context(
-            query=question, retrieved_chunks=chunks, reranker=real_reranker, policy="hybrid")
+            selection_pipeline, "What radio frequency does the sensor use in Europe?")
 
         print(f"\n  confidence = {confidence}")
-        print(f"  selected   = {[c.chunk_id for c in selected]}")
+        print(f"  selected   = {selected}")
         assert confidence == "low"
-        assert "kestrel-specs" in [c.chunk_id for c in selected], (
+        assert "kestrel-specs" in selected, (
             "the fallback failed to recover a chunk the gate dropped — this is "
             "a real answer-quality bug, not a threshold-tuning question"
         )

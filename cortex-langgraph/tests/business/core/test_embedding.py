@@ -1,315 +1,170 @@
-"""Tests for embedding providers."""
+"""Tests for the embedding factory (create_embedder) and the embedding cache.
 
-import sys
-import os
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+cortex-core tested its own Embedder ABC, OpenAIEmbedder and a hand-written
+retry loop. Those are replaced by LangChain's Embeddings interface and
+OpenAIEmbeddings / AzureOpenAIEmbeddings (which retry internally). What's
+left to test is the factory's selection logic and the CacheBackedEmbeddings
+wiring. Constructing the real classes makes no network call.
+"""
 
-project_root = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(project_root))
+from __future__ import annotations
+
+from typing import List
 
 import pytest
-from src.business.core.embedding import Embedder, OpenAIEmbedder, create_embedder
+from langchain_core.embeddings import Embeddings
+from langchain_openai import AzureOpenAIEmbeddings, OpenAIEmbeddings
+
+from src.business.core.embedding import create_embedder, with_embedding_cache
+from src.utils.config import model_settings
 
 
-class TestEmbedderInterface:
-    """Test the Embedder abstract interface."""
-
-    def test_cannot_instantiate_abstract_base(self):
-        """Embedder is abstract and cannot be instantiated."""
-        with pytest.raises(TypeError):
-            Embedder()
-
-    def test_subclass_must_implement_methods(self):
-        """Subclasses must implement required methods."""
-        class IncompleteEmbedder(Embedder):
-            pass
-
-        with pytest.raises(TypeError):
-            IncompleteEmbedder()
+@pytest.fixture(autouse=True)
+def clean_env(monkeypatch):
+    for name in ("EMBEDDING_PROVIDER", "OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT",
+                 "AZURE_OPENAI_API_KEY", "AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME"):
+        monkeypatch.delenv(name, raising=False)
 
 
-class TestOpenAIEmbedderInitialization:
-    """Test OpenAIEmbedder initialization."""
-
-    def test_initializes_with_api_key(self):
-        """OpenAIEmbedder accepts api_key parameter."""
-        with patch("src.business.core.embedding.OpenAI"):
-            embedder = OpenAIEmbedder(api_key="test-key")
-            assert embedder.model == "text-embedding-3-small"
-
-    def test_initializes_with_custom_model(self):
-        """OpenAIEmbedder accepts custom model parameter."""
-        with patch("src.business.core.embedding.OpenAI"):
-            embedder = OpenAIEmbedder(
-                api_key="test-key",
-                model="text-embedding-3-large"
-            )
-            assert embedder.model == "text-embedding-3-large"
-
-    def test_accepts_preconfigured_client(self):
-        """OpenAIEmbedder can use a pre-built client (e.g., Azure)."""
-        mock_client = Mock()
-        embedder = OpenAIEmbedder(client=mock_client)
-        assert embedder.client is mock_client
-
-    def test_creates_client_from_api_key(self):
-        """OpenAIEmbedder creates client from api_key if not provided."""
-        with patch("src.business.core.embedding.OpenAI") as mock_openai:
-            embedder = OpenAIEmbedder(api_key="test-key")
-            mock_openai.assert_called_once_with(api_key="test-key")
+@pytest.fixture
+def azure_env(monkeypatch):
+    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.invalid")
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "azure-key")
+    monkeypatch.setenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME", "embed-deployment")
 
 
-class TestOpenAIEmbedderEmbedQuery:
-    """Test embed_query method."""
+class CountingEmbedder(Embeddings):
+    """Counts how many texts actually reach the (would-be paid) model."""
 
-    def test_embed_single_query(self):
-        """embed_query embeds a single text."""
-        mock_client = Mock()
-        mock_response = Mock()
-        mock_response.data = [Mock(embedding=[0.1, 0.2, 0.3])]
-        mock_client.embeddings.create.return_value = mock_response
+    def __init__(self):
+        self.embedded: List[str] = []
 
-        embedder = OpenAIEmbedder(client=mock_client)
-        result = embedder.embed_query("Hello world")
+    def embed_documents(self, texts):
+        self.embedded.extend(texts)
+        return [[float(len(t)), 1.0] for t in texts]
 
-        assert result == [0.1, 0.2, 0.3]
-        mock_client.embeddings.create.assert_called_once()
-
-    def test_embed_query_is_list(self):
-        """embed_query returns a list of floats."""
-        mock_client = Mock()
-        mock_response = Mock()
-        mock_response.data = [Mock(embedding=[0.5] * 1536)]  # 1536-dim embedding
-        mock_client.embeddings.create.return_value = mock_response
-
-        embedder = OpenAIEmbedder(client=mock_client)
-        result = embedder.embed_query("test")
-
-        assert isinstance(result, list)
-        assert len(result) == 1536
-        assert all(isinstance(x, float) for x in result)
-
-    def test_embed_query_uses_correct_model(self):
-        """embed_query uses the configured model."""
-        mock_client = Mock()
-        mock_response = Mock()
-        mock_response.data = [Mock(embedding=[0.1])]
-        mock_client.embeddings.create.return_value = mock_response
-
-        embedder = OpenAIEmbedder(client=mock_client, model="text-embedding-3-large")
-        embedder.embed_query("test")
-
-        call_kwargs = mock_client.embeddings.create.call_args.kwargs
-        assert call_kwargs["model"] == "text-embedding-3-large"
-
-
-class TestOpenAIEmbedderEmbedDocuments:
-    """Test embed_documents method."""
-
-    def test_embed_empty_list(self):
-        """embed_documents returns empty list for empty input."""
-        mock_client = Mock()
-        embedder = OpenAIEmbedder(client=mock_client)
-        result = embedder.embed_documents([])
-        assert result == []
-        mock_client.embeddings.create.assert_not_called()
-
-    def test_embed_multiple_documents(self):
-        """embed_documents embeds multiple texts."""
-        mock_client = Mock()
-        mock_response = Mock()
-        mock_response.data = [
-            Mock(embedding=[0.1, 0.2]),
-            Mock(embedding=[0.3, 0.4]),
-            Mock(embedding=[0.5, 0.6]),
-        ]
-        mock_client.embeddings.create.return_value = mock_response
-
-        embedder = OpenAIEmbedder(client=mock_client)
-        result = embedder.embed_documents(["text1", "text2", "text3"])
-
-        assert len(result) == 3
-        assert result[0] == [0.1, 0.2]
-        assert result[1] == [0.3, 0.4]
-        assert result[2] == [0.5, 0.6]
-
-    def test_embed_documents_batches_correctly(self):
-        """embed_documents passes all texts in a single batch."""
-        mock_client = Mock()
-        mock_response = Mock()
-        mock_response.data = [Mock(embedding=[0.1]) for _ in range(5)]
-        mock_client.embeddings.create.return_value = mock_response
-
-        embedder = OpenAIEmbedder(client=mock_client)
-        texts = ["text1", "text2", "text3", "text4", "text5"]
-        embedder.embed_documents(texts)
-
-        # Verify client was called with all texts
-        call_args = mock_client.embeddings.create.call_args
-        assert call_args.kwargs["input"] == texts
-
-
-class TestOpenAIEmbedderBackwardCompatibility:
-    """Test backward compatibility methods."""
-
-    def test_embed_method_calls_embed_query(self):
-        """embed() is an alias for embed_query() (backward compat)."""
-        mock_client = Mock()
-        mock_response = Mock()
-        mock_response.data = [Mock(embedding=[0.1, 0.2])]
-        mock_client.embeddings.create.return_value = mock_response
-
-        embedder = OpenAIEmbedder(client=mock_client)
-        result = embedder.embed("test")
-
-        assert result == [0.1, 0.2]
-
-
-class TestOpenAIEmbedderRetryLogic:
-    """Test retry logic for transient errors."""
-
-    def test_retries_on_internal_server_error(self):
-        """_embed retries on InternalServerError."""
-        from openai import InternalServerError
-
-        mock_client = Mock()
-        mock_response = Mock()
-        mock_response.data = [Mock(embedding=[0.1])]
-
-        # Create mock response object for InternalServerError
-        mock_http_response = Mock()
-        mock_http_response.status_code = 500
-
-        # First call fails, second succeeds
-        mock_client.embeddings.create.side_effect = [
-            InternalServerError(message="500 error", response=mock_http_response, body={"error": "500"}),
-            mock_response,
-        ]
-
-        embedder = OpenAIEmbedder(client=mock_client)
-        with patch("time.sleep"):  # Don't actually sleep in tests
-            result = embedder.embed_query("test")
-
-        assert result == [0.1]
-        assert mock_client.embeddings.create.call_count == 2
-
-    def test_gives_up_after_max_retries(self):
-        """_embed gives up after max_retries."""
-        from openai import InternalServerError
-
-        mock_client = Mock()
-        mock_http_response = Mock()
-        mock_http_response.status_code = 500
-
-        mock_client.embeddings.create.side_effect = InternalServerError(
-            message="500 error",
-            response=mock_http_response,
-            body={"error": "500"}
-        )
-
-        embedder = OpenAIEmbedder(client=mock_client)
-        with patch("time.sleep"):
-            with pytest.raises(InternalServerError):
-                embedder.embed_query("test")
-
-        # Should have tried max_retries times (5 by default)
-        assert mock_client.embeddings.create.call_count == 5
-
-    def test_retry_delay_increases_exponentially(self):
-        """Retry delay increases exponentially (2^attempt)."""
-        from openai import InternalServerError
-
-        mock_client = Mock()
-        mock_response = Mock()
-        mock_response.data = [Mock(embedding=[0.1])]
-
-        mock_http_response = Mock()
-        mock_http_response.status_code = 500
-
-        mock_client.embeddings.create.side_effect = [
-            InternalServerError(message="500", response=mock_http_response, body={"error": "500"}),
-            InternalServerError(message="500", response=mock_http_response, body={"error": "500"}),
-            mock_response,
-        ]
-
-        embedder = OpenAIEmbedder(client=mock_client)
-
-        sleep_calls = []
-        with patch("time.sleep", side_effect=lambda x: sleep_calls.append(x)):
-            result = embedder.embed_query("test")
-
-        # Should have 2 retries with delays 2^0=1, 2^1=2
-        assert sleep_calls == [1, 2]
+    def embed_query(self, text):
+        self.embedded.append(text)
+        return [float(len(text)), 1.0]
 
 
 class TestCreateEmbedderFactory:
-    """Test the create_embedder factory function."""
-
-    @patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"})
-    def test_default_provider_is_openai(self):
-        """Default provider is OpenAI."""
+    def test_default_provider_is_openai(self, monkeypatch):
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
         embedder = create_embedder()
-        assert isinstance(embedder, OpenAIEmbedder)
+        assert isinstance(embedder, OpenAIEmbeddings)
+        assert isinstance(embedder, Embeddings)
 
-    @patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"})
-    def test_explicit_openai_provider(self):
-        """provider='openai' creates OpenAIEmbedder."""
-        embedder = create_embedder(provider="openai")
-        assert isinstance(embedder, OpenAIEmbedder)
+    def test_default_model_comes_from_config(self, monkeypatch):
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+        assert create_embedder().model == model_settings("embedding")["name"]
 
-    @patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"})
-    def test_custom_model_name(self):
-        """model parameter is passed through."""
-        embedder = create_embedder(
-            provider="openai",
-            model="text-embedding-3-large"
-        )
-        assert embedder.model == "text-embedding-3-large"
+    def test_changing_the_config_changes_the_model(self, monkeypatch, override_config):
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+        override_config({"models": {"embedding": {"name": "text-embedding-3-large"}}})
+        assert create_embedder().model == "text-embedding-3-large"
 
-    @patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False)
+    def test_azure_uses_the_deployment_not_the_config_model_name(self, azure_env):
+        assert create_embedder("azure_openai").deployment == "embed-deployment"
+
+    def test_custom_model_name(self, monkeypatch):
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+        assert create_embedder(model="text-embedding-3-large").model == "text-embedding-3-large"
+
+    def test_passed_api_key_wins(self):
+        embedder = create_embedder("openai", api_key="passed-key")
+        assert embedder.openai_api_key.get_secret_value() == "passed-key"
+
     def test_openai_requires_api_key(self):
-        """OpenAI provider raises error without OPENAI_API_KEY."""
-        with pytest.raises(RuntimeError, match="OPENAI_API_KEY must be set"):
-            create_embedder(provider="openai")
+        with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
+            create_embedder("openai")
 
-    @patch.dict(os.environ, {
-        "AZURE_OPENAI_ENDPOINT": "https://test.openai.azure.com/",
-        "AZURE_OPENAI_API_KEY": "test-key",
-        "AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME": "test-embedding"
-    })
-    def test_azure_openai_provider(self):
-        """provider='azure_openai' creates OpenAIEmbedder with Azure client."""
-        embedder = create_embedder(provider="azure_openai")
-        assert isinstance(embedder, OpenAIEmbedder)
-        assert embedder.model == "test-embedding"
+    def test_retries_are_enabled(self, monkeypatch):
+        """Replaces cortex-core's hand-rolled exponential backoff."""
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+        assert create_embedder().max_retries == 5
 
-    @patch.dict(os.environ, {
-        "AZURE_OPENAI_ENDPOINT": "https://test.openai.azure.com/",
-        "AZURE_OPENAI_API_KEY": "test-key"
-    }, clear=False)
-    def test_azure_requires_embedding_deployment_name(self):
-        """Azure requires AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME."""
-        with patch.dict(os.environ, {"AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME": ""}, clear=False):
-            with pytest.raises(RuntimeError, match="AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME"):
-                create_embedder(provider="azure_openai")
+    def test_azure_openai_provider(self, azure_env):
+        embedder = create_embedder("azure_openai")
+        assert isinstance(embedder, AzureOpenAIEmbeddings)
+        assert embedder.deployment == "embed-deployment"
+
+    def test_azure_requires_embedding_deployment_name(self, monkeypatch):
+        monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.invalid")
+        monkeypatch.setenv("AZURE_OPENAI_API_KEY", "azure-key")
+        with pytest.raises(RuntimeError, match="AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME"):
+            create_embedder("azure_openai")
+
+    def test_env_var_provider_selection(self, monkeypatch, azure_env):
+        monkeypatch.setenv("EMBEDDING_PROVIDER", "azure_openai")
+        assert isinstance(create_embedder(), AzureOpenAIEmbeddings)
+
+    def test_case_insensitive_provider(self, monkeypatch):
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+        assert isinstance(create_embedder(" OPENAI "), OpenAIEmbeddings)
 
     def test_unknown_provider_raises_error(self):
-        """Unknown provider raises ValueError."""
         with pytest.raises(ValueError, match="Unknown EMBEDDING_PROVIDER"):
-            create_embedder(provider="unknown_provider")
+            create_embedder("cohere")
 
-    @patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"})
-    def test_case_insensitive_provider(self):
-        """Provider name is case-insensitive."""
-        embedder1 = create_embedder(provider="OPENAI")
-        embedder2 = create_embedder(provider="OpenAI")
-        assert isinstance(embedder1, OpenAIEmbedder)
-        assert isinstance(embedder2, OpenAIEmbedder)
+    def test_no_cache_by_default(self, monkeypatch):
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+        assert type(create_embedder()) is OpenAIEmbeddings
 
-    @patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"})
-    def test_env_var_provider_selection(self):
-        """EMBEDDING_PROVIDER env var selects provider."""
-        with patch.dict(os.environ, {"EMBEDDING_PROVIDER": "openai"}):
-            embedder = create_embedder()
-            assert isinstance(embedder, OpenAIEmbedder)
+    def test_cache_dir_wraps_the_model_in_a_cache(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+        embedder = create_embedder(cache_dir=str(tmp_path))
+        assert type(embedder).__name__ == "CacheBackedEmbeddings"
+        assert isinstance(embedder.underlying_embeddings, OpenAIEmbeddings)
+
+
+class TestEmbeddingCache:
+    def test_repeated_documents_are_embedded_once(self, tmp_path):
+        inner = CountingEmbedder()
+        cached = with_embedding_cache(inner, cache_dir=str(tmp_path), namespace="test:model")
+
+        first = cached.embed_documents(["alpha", "beta"])
+        second = cached.embed_documents(["alpha", "beta", "gamma"])
+
+        assert inner.embedded == ["alpha", "beta", "gamma"]
+        assert second[:2] == first
+
+    def test_repeated_queries_are_embedded_once(self, tmp_path):
+        inner = CountingEmbedder()
+        cached = with_embedding_cache(inner, cache_dir=str(tmp_path), namespace="test:model")
+        cached.embed_query("what is x?")
+        cached.embed_query("what is x?")
+        assert inner.embedded == ["what is x?"]
+
+    def test_cache_survives_a_new_instance(self, tmp_path):
+        """It's an on-disk cache: a restart must not re-pay for embeddings."""
+        with_embedding_cache(CountingEmbedder(), cache_dir=str(tmp_path), namespace="m").embed_documents(["alpha"])
+        inner = CountingEmbedder()
+        with_embedding_cache(inner, cache_dir=str(tmp_path), namespace="m").embed_documents(["alpha"])
+        assert inner.embedded == []
+
+    def test_different_models_never_share_cache_entries(self, tmp_path):
+        """Vectors from different models are not interchangeable."""
+        with_embedding_cache(CountingEmbedder(), cache_dir=str(tmp_path), namespace="openai:small").embed_documents(["alpha"])
+        inner = CountingEmbedder()
+        with_embedding_cache(inner, cache_dir=str(tmp_path), namespace="openai:large").embed_documents(["alpha"])
+        assert inner.embedded == ["alpha"]
+
+    def test_namespace_with_separator_characters_is_usable(self, tmp_path):
+        """Regression: LocalFileStore rejects ':' in keys, and the factory's
+        namespace is "<provider>:<model>". The first write used to raise."""
+        cached = with_embedding_cache(CountingEmbedder(), cache_dir=str(tmp_path),
+                                      namespace="azure_openai:my deployment/v2")
+        assert cached.embed_documents(["alpha"]) == [[5.0, 1.0]]
+
+    def test_factory_built_cache_can_write(self, monkeypatch, tmp_path):
+        """End-to-end through create_embedder(cache_dir=...): the real
+        namespace it builds must be accepted by the store."""
+        from unittest.mock import patch
+
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+        with patch("langchain_openai.OpenAIEmbeddings.embed_documents", return_value=[[0.1, 0.2]]) as inner:
+            embedder = create_embedder(cache_dir=str(tmp_path))
+            assert embedder.embed_documents(["alpha"]) == [[0.1, 0.2]]
+            assert embedder.embed_documents(["alpha"]) == [[0.1, 0.2]]
+        inner.assert_called_once()
