@@ -1,6 +1,13 @@
 import React from "react";
 import ReactMarkdown from "react-markdown";
 
+// Links in answers (news articles, sources) open in a NEW tab, so following
+// one never navigates away from the chat. rel="noopener noreferrer" stops the
+// opened page from controlling this tab.
+const markdownComponents = {
+  a: ({ node, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" />,
+};
+
 export default function MessageBubble({ role, content, timestamp }) {
   const isUser = role === "user";
 
@@ -15,7 +22,7 @@ export default function MessageBubble({ role, content, timestamp }) {
           <p className="bubble-text">{content}</p>
         ) : (
           <div className="bubble-text bubble-markdown">
-            <ReactMarkdown>{content}</ReactMarkdown>
+            <ReactMarkdown components={markdownComponents}>{content}</ReactMarkdown>
           </div>
         )}
         {timestamp && (

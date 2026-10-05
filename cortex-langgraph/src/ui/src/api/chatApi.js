@@ -30,14 +30,16 @@ export async function sendMessage(message, sessionId, userId = null) {
  * Fetch chat history for a session.
  * @param {number} userId
  * @param {string} sessionId
- * @param {number} limit
+ * @param {number} limit   max 100 (the API's cap)
+ * @param {number} offset  how many messages to skip (pagination)
  * @returns {Promise<{messages: Array, total: number}>}
  */
-export async function fetchHistory(userId, sessionId, limit = 50) {
+export async function fetchHistory(userId, sessionId, limit = 50, offset = 0) {
   const params = new URLSearchParams({
     user_id: userId,
     session_id: sessionId,
     limit,
+    offset,
   });
 
   const res = await fetch(`${BASE}/history?${params}`);
@@ -112,11 +114,12 @@ export async function deleteSession(userId, sessionId) {
  * @param {string} question
  * @returns {Promise<{answer: string, sources: Array}>}
  */
-export async function ragQuery(question) {
+export async function ragQuery(question, userId = null) {
   const res = await fetch(`${BASE}/rag/query`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
+    // With a user id the backend saves the Q&A, so it survives reloads.
+    body: JSON.stringify({ question, user_id: userId }),
   });
 
   if (!res.ok) {
@@ -125,4 +128,45 @@ export async function ragQuery(question) {
   }
 
   return res.json();
+}
+
+/**
+ * Fetch EVERY message of a session, oldest first, paging through the API
+ * (which returns at most 100 per request).
+ * @param {number} userId
+ * @param {string} sessionId
+ * @returns {Promise<Array<{role: string, content: string, timestamp: string}>>}
+ */
+export async function fetchAllHistory(userId, sessionId) {
+  const pageSize = 100;
+  const messages = [];
+  for (;;) {
+    const page = await fetchHistory(userId, sessionId, pageSize, messages.length);
+    messages.push(...page.messages);
+    if (page.messages.length < pageSize || messages.length >= page.total) return messages;
+  }
+}
+
+async function getJson(url, options) {
+  const res = await fetch(url, options);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+/** PDFs currently in the RAG index: {documents: [{source_id, pages, chunks, indexed_at}]} */
+export function listRagDocuments() {
+  return getJson(`${BASE}/rag/documents`);
+}
+
+/** A user's saved PDF Q&A, oldest first: {items: [{id, question, answer, sources, created_at}]} */
+export function fetchRagHistory(userId) {
+  return getJson(`${BASE}/rag/history?user_id=${userId}`);
+}
+
+/** Delete a user's saved PDF Q&A: {deleted: number} */
+export function clearRagHistory(userId) {
+  return getJson(`${BASE}/rag/history?user_id=${userId}`, { method: "DELETE" });
 }

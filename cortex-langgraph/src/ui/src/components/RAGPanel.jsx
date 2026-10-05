@@ -1,5 +1,5 @@
-import React, { useRef, useState } from "react";
-import { ragQuery, uploadPdf } from "../api/chatApi.js";
+import React, { useEffect, useRef, useState } from "react";
+import { clearRagHistory, fetchRagHistory, listRagDocuments, ragQuery, uploadPdf } from "../api/chatApi.js";
 
 // ── Icons ─────────────────────────────────────────────────────────────────
 
@@ -58,7 +58,7 @@ function SourceCard({ source, index }) {
 
 // ── Main panel ─────────────────────────────────────────────────────────────
 
-export default function RAGPanel() {
+export default function RAGPanel({ userId }) {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [uploading, setUploading]         = useState(false);
   const [uploadError, setUploadError]     = useState(null);
@@ -70,6 +70,41 @@ export default function RAGPanel() {
 
   const fileInputRef = useRef(null);
 
+  // ── restore from the server ─────────────────────────────────────────────
+  // The index and the Q&A are stored by the backend, so a reload or restart
+  // shows the same PDF and the same past questions.
+  const loadDocuments = async () => {
+    try {
+      const { documents } = await listRagDocuments();
+      setUploadedFiles(documents.map((d) => ({ name: d.source_id, chunks: d.chunks, pages: d.pages })));
+    } catch (err) {
+      console.warn("Failed to load indexed documents:", err);
+    }
+  };
+
+  useEffect(() => {
+    loadDocuments();
+    (async () => {
+      try {
+        const { items } = await fetchRagHistory(userId);
+        setConversations(items.map((it) => ({
+          id: `saved-${it.id}`, question: it.question, answer: it.answer, sources: it.sources, error: null,
+        })));
+      } catch (err) {
+        console.warn("Failed to load RAG history:", err);
+      }
+    })();
+  }, [userId]);
+
+  const handleClearHistory = async () => {
+    try {
+      await clearRagHistory(userId);
+      setConversations([]);
+    } catch (err) {
+      setUploadError(`Couldn't clear history: ${err.message}`);
+    }
+  };
+
   // ── upload logic ─────────────────────────────────────────────────────────
   const handleFile = async (file) => {
     if (!file || !file.name.toLowerCase().endsWith(".pdf")) {
@@ -79,11 +114,9 @@ export default function RAGPanel() {
     setUploading(true);
     setUploadError(null);
     try {
-      const result = await uploadPdf(file);
-      setUploadedFiles((prev) => [
-        { name: file.name, chunks: result.chunks_indexed },
-        ...prev.filter((f) => f.name !== file.name),
-      ]);
+      await uploadPdf(file);
+      // An upload replaces the index, so show exactly what the server now holds.
+      await loadDocuments();
     } catch (err) {
       setUploadError(err.message);
     } finally {
@@ -115,7 +148,7 @@ export default function RAGPanel() {
     setAsking(true);
 
     try {
-      const result = await ragQuery(q);
+      const result = await ragQuery(q, userId);
       setConversations((prev) =>
         prev.map((c) =>
           c.id === id ? { ...c, answer: result.answer, sources: result.sources || [] } : c
@@ -162,7 +195,7 @@ export default function RAGPanel() {
           {uploading ? (
             <div className="rag-dropzone-status">
               <div className="rag-spinner" />
-              <span>Indexing PDF…</span>
+              <span>Indexing PDF… large PDFs take several minutes. You can switch to the chatbot meanwhile.</span>
             </div>
           ) : (
             <div className="rag-dropzone-idle">
@@ -180,7 +213,9 @@ export default function RAGPanel() {
               <li key={f.name} className="rag-file-item">
                 <PdfIcon />
                 <span className="rag-file-name">{f.name}</span>
-                <span className="rag-file-meta">{f.chunks} chunks</span>
+                <span className="rag-file-meta">
+                  {f.pages ? `${f.pages} pages · ` : ""}{f.chunks} chunks
+                </span>
               </li>
             ))}
           </ul>
@@ -221,6 +256,12 @@ export default function RAGPanel() {
           )}
         </section>
       ))}
+
+      {conversations.length > 0 && (
+        <button className="rag-clear-btn" onClick={handleClearHistory} disabled={asking}>
+          Clear Q&A history
+        </button>
+      )}
 
       {/* ── Question input ── */}
       <section className="rag-section">

@@ -910,3 +910,16 @@ body {
   border-top: 1px solid var(--border);
   white-space: pre-wrap;
 }
+
+/* RAG: clear saved Q&A */
+.rag-clear-btn {
+  align-self: flex-end;
+  background: none;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  opacity: 0.6;
+  cursor: pointer;
+}
+.rag-clear-btn:hover:not(:disabled) { opacity: 1; }
