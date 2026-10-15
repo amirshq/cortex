@@ -1,0 +1,19 @@
+# Optional packages for tests/tools/, installed into the APP's venv (cortex-langgraph/.venv),
+# because both need the app: Langfuse hooks into the running graphs, DeepEval runs the pipeline.
+# The app never imports them, so they stay out of the main requirements.txt.
+#
+#     .venv/bin/pip install -r tests/tools/requirements.txt
+#
+# RAGAS is NOT here: it needs an older openai / langchain-community than the app. It has its
+# own venv, see ragas/requirements.txt.
+langfuse==4.15.6
+deepeval==3.9.6
+
+# Keep chromadb's own requirements. Without these pins, deepeval pulls posthog 7 and langfuse
+# pulls OpenTelemetry 1.45, and chromadb 1.4.1 requires posthog<6 and OpenTelemetry 1.44.
+posthog<6
+opentelemetry-api==1.44.0
+opentelemetry-sdk==1.44.0
+opentelemetry-proto==1.44.0
+opentelemetry-exporter-otlp-proto-common==1.44.0
+opentelemetry-semantic-conventions==0.65b0

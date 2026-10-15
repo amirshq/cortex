@@ -65,7 +65,11 @@ src/
     chat_history_manager.py  SQLite sessions/messages — backs /history and /sessions.
   database/dto.py     Pydantic DTOs — the API contract; must stay identical to cortex-core's.
   config/config.yml   Non-secret settings — the ONLY place models are named (models:).
-tests/                See "Testing".
+tests/
+  correctness/        Does the code work? Unit / integration / E2E, fakes, run by plain `pytest`.
+  evals/              How good are the results? Real models: `pytest -m eval` + eval_golden.py.
+  tools/              Langfuse, RAGAS, DeepEval, Grafana: `pytest -m tools`. RAGAS has its own venv
+                      (tests/tools/ragas/.venv); see tests/tools/README.md.
 ```
 
 ## Key design decisions (don't undo without reason)
@@ -94,15 +98,34 @@ tests/                See "Testing".
 non-secret settings.
 
 **Models are configured only in `config.yml` → `models:`**, one entry per role: `chat` (the
-agent), `rag` (RAG answers, including `temperature` / `max_tokens`), `embedding` and
-`reranker`. Never write a model name in code. Read it with `model_settings(role)` from
-`src/utils/config.py`, or pass `role=` to `create_llm()`.
+agent), `rag` (RAG answers, including `temperature` / `max_tokens`), `embedding` (chat
+memory), `rag_embedding` (the RAG index), `reranker` (a cross-encoder, or `"none"` to keep
+vector order with no gate), and `judge` (evaluation only: grades answers in
+`tests/evals/eval_golden.py`). Never write a model name in code. Read it with
+`model_settings(role)` from `src/utils/config.py`, or pass `role=` to `create_llm()` /
+`create_embedder()`.
+- **`embedding` and `rag_embedding` are separate on purpose.** Each index must be queried with
+  the model it was built with. Changing `rag_embedding` means re-indexing the RAG store;
+  changing `embedding` means rebuilding chat memory (`data/vectordb`).
+- **With `reranker: "none"`, the rerank node keeps the vector top-n and sets confidence to
+  `"unranked"`.** `query_rag` records no confidence metric for it: no gate means no signal.
+- **The current values are the winners of the golden-set evaluation.** See
+  `tests/evals/EXPERIMENTS.md`. Change them only with a new experiment.
 - An explicit `model_name=` argument still overrides the config, for tests and evals.
 - Azure takes its deployment names from `.env` instead; the Hugging Face provider needs
   `HF_MODEL_NAME`.
 - `load_config()` **rejects duplicate YAML keys**. A duplicated `llm_config:` block once
   silently wiped the RAG system role.
 - In tests, use the `override_config({...})` fixture to change config values.
+
+**RAG tunables are configured only in `config.yml` → `rag:`.** That covers chunking (`chunk_size`,
+`chunk_overlap`), indexing (`embedding_batch_size`), retrieval (`top_k`, `top_n`, `fallback_policy`)
+and the re-ranker (`min_score`, `device`, `batch_size`, blend options). Read them with
+`rag_settings(section)`, and never hardcode a number in code. Explicit arguments still override
+them (`ReRankerConfig(top_k_input=50)`, `split_documents(docs, chunk_size=400)`). Changing
+`rag.chunking` (including `strategy`: `recursive` | `table_aware`) requires re-indexing.
+Re-index through `ingest_pdfs()` (the upload path) or `tests/evals/build_experiment_index.py`.
+`scripts/index_cli.py` truncates each document to 12,000 characters by default.
 
 Other config sections: `prompts.rag_system_role`, `agent.max_tool_rounds` and `directories`.
 
@@ -126,20 +149,23 @@ separate indexes** by design.
 
 Two tiers; plain `pytest` runs only the first.
 
-**Tier 1 — hermetic (657 + 10 known-bug xfails, ~20s).** No network, no keys. The shared fakes
-in `tests/conftest.py` implement the real LangChain interfaces:
+**Tier 1 — correctness, `tests/correctness/` (725 + 10 known-bug xfails, ~20s).** No network, no keys. The shared fakes
+in `tests/correctness/conftest.py` implement the real LangChain interfaces:
 - `FakeChatModel(BaseChatModel)` — replays scripted `AIMessage`s (build them with `reply()`,
   `tool_call()`, `tool_calls()`), records every call in `.calls`, and raises scripted exceptions.
 - `FakeEmbedder(Embeddings)` — deterministic vectors; records query and document calls.
 - `conversation_store` fixture — a REAL Chroma store in `tmp_path`.
 - `FakeRedisMemory` — async in-memory short-term memory.
 
-`tests/api/conftest.py` blocks all non-loopback network access and redirects every data path
+`tests/correctness/api/conftest.py` blocks all non-loopback network access and redirects every data path
 into `tmp_path`. Async tests need `@pytest.mark.asyncio` (`asyncio_mode = strict`).
 DeprecationWarnings raised from `src.*` fail the run.
 
-**Tier 2 — evals (35, `pytest -m eval -s`).** Real OpenAI, a real cross-encoder, real cost
+**Tier 2 — evals, `tests/evals/` (35, `pytest -m eval -s`).** Real OpenAI, a real cross-encoder, real cost
 (cents). They use the fictional golden corpus in `tests/evals/data/golden_set.json`.
+`tests/evals/eval_golden.py` is the golden-set evaluation on a real book (30 questions); it
+saves each run to `tests/evals/results/`. RAG performance work belongs in `tests/evals/`, never in
+`src/` or `scripts/`.
 `selection_pipeline` runs the real RAG graph with a no-op LLM, so selection is measured for free.
 
 **Known finding pinned by `TestRerankerGate`** (inherited from core on purpose): the
@@ -147,7 +173,7 @@ cross-encoder emits raw logits (about ±10), but `min_score=0.15` reads like a 0
 so the effective gate is sigmoid(0.15) ≈ 0.54. One golden query gets gated out and is
 recovered by the fallback branch. Fixing the scale should deliberately break those tests.
 
-The xfail tests in `tests/api/e2e/` pin known API bugs shared with cortex-core. They're
+The xfail tests in `tests/correctness/api/e2e/` pin known API bugs shared with cortex-core. They're
 `strict=True`, so a fix turns them into failures that prompt removing the marker.
 
 No lint/format tooling is configured; match the surrounding style by hand.
@@ -157,7 +183,7 @@ No lint/format tooling is configured; match the surrounding style by hand.
 - Keep the router thin: HTTP concerns in `router.py` / `controller.py`, logic in `src/business/`.
   New endpoints use DTOs from `src/database/dto.py`, never raw `dict` bodies.
 - New LLM-facing code should use the LangChain interfaces (`BaseChatModel`, `Embeddings`,
-  `VectorStore`, `BaseCrossEncoder`) so the fakes in `tests/conftest.py` keep working.
+  `VectorStore`, `BaseCrossEncoder`) so the fakes in `tests/correctness/conftest.py` keep working.
 - Prometheus metric names use `_total` / `_seconds` suffixes. Never label a metric with
   high-cardinality values (user IDs, session IDs).
 

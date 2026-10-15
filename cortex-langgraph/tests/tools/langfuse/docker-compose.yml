@@ -1,0 +1,168 @@
+# Self-hosted Langfuse for cortex-langgraph (roadmap 5.2).
+#
+# Based on Langfuse's official docker-compose.yml (langfuse/langfuse, main), changed to fit
+# next to the Cortex monitoring stack on one machine:
+#   - Web UI on host port 3002 (3000 is commonly taken; Grafana is on 3001).
+#   - Postgres, ClickHouse, Redis and the worker publish NO host ports: they only talk on the
+#     compose network, so they can't clash with the local Redis (6379) or anything else.
+#   - MinIO (S3 storage) on 127.0.0.1:9092, because Prometheus already uses 9090.
+#   - Secrets come from ./.env (gitignored; see env.example). No default passwords.
+#   - Langfuse's own usage telemetry is off.
+#   - The org, project, API keys and admin login are created on first start (LANGFUSE_INIT_*),
+#     so the app's .env can use the keys without clicking through the UI.
+#
+# From cortex-langgraph/:
+#     docker compose -f tests/tools/langfuse/docker-compose.yml --env-file tests/tools/langfuse/.env up -d
+#     open http://localhost:3002
+name: cortex-langfuse
+
+x-langfuse-env: &langfuse-env
+  NEXTAUTH_URL: http://localhost:3002
+  DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?set in .env}@postgres:5432/postgres
+  SALT: ${SALT:?set in .env}
+  ENCRYPTION_KEY: ${ENCRYPTION_KEY:?set in .env}
+  TELEMETRY_ENABLED: "false"
+  LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "false"
+  CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+  CLICKHOUSE_URL: http://clickhouse:8123
+  CLICKHOUSE_USER: clickhouse
+  CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set in .env}
+  CLICKHOUSE_CLUSTER_ENABLED: "false"
+  LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
+  LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?set in .env}
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+  LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: minio
+  LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?set in .env}
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_AUTH: ${REDIS_AUTH:?set in .env}
+  REDIS_TLS_ENABLED: "false"
+  # Off (0): with the default 30 s socket timeout, ioredis dropped the idle BullMQ queue
+  # connections over and over ("Socket timeout. Expecting data, but didn't receive any in
+  # 30000ms", ~1.5 errors/s in the worker log). It only detects dead connections to a remote
+  # Redis; this Redis is a container on the same network.
+  REDIS_SOCKET_TIMEOUT_MS: "0"
+
+x-depends-on: &depends-on
+  postgres:
+    condition: service_healthy
+  minio:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+  clickhouse:
+    condition: service_healthy
+
+services:
+  langfuse-worker:
+    image: docker.langfuse.com/langfuse/langfuse-worker:4
+    restart: unless-stopped
+    depends_on: *depends-on
+    environment:
+      <<: *langfuse-env
+
+  langfuse-web:
+    image: docker.langfuse.com/langfuse/langfuse:4
+    restart: unless-stopped
+    depends_on: *depends-on
+    ports:
+      - 127.0.0.1:3002:3000
+    environment:
+      <<: *langfuse-env
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?set in .env}
+      # Browsers upload media to MinIO directly, so the web service hands out the host address.
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://localhost:9092
+      LANGFUSE_S3_MEDIA_UPLOAD_INTERNAL_ENDPOINT: http://minio:9000
+      # Headless first-start setup: created once, ignored when they already exist.
+      LANGFUSE_INIT_ORG_ID: cortex
+      LANGFUSE_INIT_ORG_NAME: Cortex
+      LANGFUSE_INIT_PROJECT_ID: cortex-langgraph
+      LANGFUSE_INIT_PROJECT_NAME: cortex-langgraph
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:?set in .env}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_SECRET_KEY:?set in .env}
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_ADMIN_EMAIL:?set in .env}
+      LANGFUSE_INIT_USER_NAME: Cortex admin
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_ADMIN_PASSWORD:?set in .env}
+
+  clickhouse:
+    image: docker.io/clickhouse/clickhouse-server:25.12
+    restart: unless-stopped
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set in .env}
+    volumes:
+      - langfuse_clickhouse_data:/var/lib/clickhouse
+      - langfuse_clickhouse_logs:/var/log/clickhouse-server
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 1s
+
+  minio:
+    image: cgr.dev/chainguard/minio
+    restart: unless-stopped
+    entrypoint: sh
+    # Create the 'langfuse' bucket before starting the service.
+    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set in .env}
+    ports:
+      - 127.0.0.1:9092:9000
+    volumes:
+      - langfuse_minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 1s
+      timeout: 5s
+      retries: 5
+      start_period: 1s
+
+  redis:
+    image: docker.io/redis:7
+    restart: unless-stopped
+    command: --requirepass ${REDIS_AUTH:?set in .env} --maxmemory-policy noeviction
+    volumes:
+      - langfuse_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_AUTH}", "--no-auth-warning", "ping"]
+      interval: 3s
+      timeout: 10s
+      retries: 10
+
+  postgres:
+    image: docker.io/postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      POSTGRES_DB: postgres
+      TZ: UTC
+      PGTZ: UTC
+    volumes:
+      - langfuse_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  langfuse_postgres_data:
+  langfuse_clickhouse_data:
+  langfuse_clickhouse_logs:
+  langfuse_minio_data:
+  langfuse_redis_data:

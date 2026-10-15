@@ -1,52 +1,75 @@
-"""Index builder:
-Ingests PDFs → extracts text and tables
-Chunks → splits into smaller pieces
-Embeds → converts text to vectors
-Stores → saves to vector database (line 78)
+"""Index builder — LangChain edition.
+
+Load → split → store, each step a LangChain component:
+
+    DoclingLoader               PDFs → Documents          (pdfingest/pdf_digest.py)
+    RecursiveCharacterTextSplitter  Documents → chunks    (pdfingest/chunk.py)
+    VectorStore.add_documents   chunks → embedded + stored (vector_store.py)
+
+index_builder.build_index()                     ← this file: calls the three steps in order
+    1. load_pdf_documents()    → pdfingest/pdf_digest.py   (DoclingLoader)
+    2. split_documents()       → pdfingest/chunk.py        (RecursiveCharacterTextSplitter)
+    3. create_vector_store()   → vector_store.py
+       .add_documents(batch)                                (embed + upsert, in batches from config.yml)
+
+build_index() orchestrates the entire indexing pipeline in three steps:
+
+Load PDFs → load_pdf_documents() uses Docling to convert PDFs into LangChain Document objects.
+Split documents → split_documents() divides them into chunks using RecursiveCharacterTextSplitter.
+Embed + store → processes chunks in batches (rag.indexing.embedding_batch_size) and calls vstore.add_documents(), which embeds the chunks and upserts them into the vector store.
+
+
+cortex-core embedded each batch itself and handed raw vectors to the store.
+A LangChain vector store owns its embedding model, so add_documents() embeds
+and upserts in one call.
+
+The LangChain version is much smaller because LangChain abstracts and standardizes
+many of the low-level document-processing steps that you implemented manually in
+the original version. Instead of directly inspecting the DoclingDocument, 
+iterating through text blocks and tables, filtering labels, constructing
+the combined text, and building your own IngestedDocument and metadata, 
+DoclingLoader handles much of that conversion and returns a standard LangChain
+Document. That Document can then directly flow into LangChain components
+such as text splitters → embeddings → vector stores → retrievers, 
+so you write less glue code while still using Docling underneath 
+for the actual PDF parsing, OCR, layout analysis, and table extraction.
 """
 
 from __future__ import annotations
 
+import json
+from collections import Counter
+from datetime import datetime
 from pathlib import Path
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 from dotenv import load_dotenv
 
-from .pdfingest.pdf_digest import ingest_directory, IngestedDocument
-from .pdfingest.chunk import Chunker, Chunk
-from ..core.embedding import create_embedder
+from .pdfingest.pdf_digest import load_pdf_documents
+from .pdfingest.chunk import split_documents
 from .vector_store import create_vector_store
-
-
-def _chunk_document(doc: IngestedDocument, chunker: Chunker, table_start_idx: int | None) -> List[Chunk]:
-    source_metadata = {"source_id": doc.source_id}
-    chunks = chunker.split(doc.combined_text, source_metadata=source_metadata)
-    enriched = []
-    for ch in chunks:
-        md = dict(ch.metadata)
-        section = "table" if table_start_idx is not None and md.get("chunk_start", 0) >= table_start_idx else "text"
-        md.update({"source_id": doc.source_id, "section": section})
-        enriched.append(Chunk(chunk_id=ch.chunk_id, text=ch.text, metadata=md))
-    return enriched
+from src.utils.config import rag_settings
 
 
 def build_index(
     data_dir: Path,
     persist_dir: Path,
-    max_context_chars: int = 12_000,
+    max_context_chars: int | None = 12_000,
     include_table_images: bool = True,
-    pdf_strategy: str = "hi_res",
-    chunk_size: int = 800,
-    overlap: int = 100,
+    pdf_strategy: str = "auto",
+    chunk_size: int | None = None,
+    overlap: int | None = None,
     top_k_store: int | None = None,
 ) -> Tuple[int, int]:
     """
     Build or rebuild the vector index from PDFs.
+    chunk_size / overlap default to config.yml → rag.chunking; the embedding
+    batch size comes from rag.indexing.embedding_batch_size.
     Returns (docs_indexed, chunks_indexed).
     """
     load_dotenv()
 
-    docs = ingest_directory(
+    docs = load_pdf_documents(
         data_dir=data_dir,
         max_context_chars=max_context_chars,
         include_table_images=include_table_images,
@@ -54,44 +77,56 @@ def build_index(
     )
     print(f"📄 Chunking {len(docs)} document(s)...", flush=True)
 
-    embedder = create_embedder()
-    chunker = Chunker(chunk_size=chunk_size, overlap=overlap)
-
-    all_chunks: List[Chunk] = []
-    for doc in docs:
-        print(f"  Chunking doc: {doc.source_id} ({len(doc.combined_text)} chars)...", flush=True)
-        # use marker to identify start of table section
-        table_marker = None
-        if doc.table_text:
-            # compute start idx of table section for provenance tagging
-            marker = "\n\n" + "=" * 80 + "\nTABLES FROM DOCUMENT IMAGES:\n" + "=" * 80 + "\n"
-            table_marker = doc.combined_text.find(marker)
-            if table_marker == -1:
-                table_marker = None
-        doc_chunks = _chunk_document(doc, chunker, table_start_idx=table_marker)
-        all_chunks.extend(doc_chunks)
-
+    chunks = split_documents(docs, chunk_size=chunk_size, overlap=overlap)
     if top_k_store:
-        all_chunks = all_chunks[:top_k_store]
+        chunks = chunks[:top_k_store]
+    print(f"✅ Chunking complete: {len(chunks)} chunk(s)", flush=True)
 
-    print(f"✅ Chunking complete: {len(all_chunks)} chunk(s)", flush=True)
-
-    # Process in batches to avoid OOM when embedding/upserting many chunks
-    batch_size = 50
-    total_batches = (len(all_chunks) + batch_size - 1) // batch_size
+    # One embedding API call embeds a whole batch, and fewer, larger calls are
+    # much faster (measured: 50 chunks took 1.7s, 200 took 1.1s). OpenAI accepts
+    # up to 2,048 inputs per call. Set in config.yml → rag.indexing.
+    batch_size = rag_settings("indexing")["embedding_batch_size"]
+    total_batches = (len(chunks) + batch_size - 1) // batch_size
     vstore = None
-    for i in range(0, len(all_chunks), batch_size):
+    for i in range(0, len(chunks), batch_size):
         batch_num = i // batch_size + 1
-        print(f"📤 Embedding batch {batch_num}/{total_batches}...", flush=True)
-        batch = all_chunks[i : i + batch_size]
-        texts = [c.text for c in batch]
-        embeddings = embedder.embed_documents(texts)
         if vstore is None:
             print("🔗 Connecting to vector store...", flush=True)
             vstore = create_vector_store(persist_dir=str(persist_dir))
-        ids = [c.chunk_id for c in batch]
-        metadatas = [c.metadata for c in batch]
-        vstore.upsert(ids=ids, embeddings=embeddings, metadatas=metadatas, documents=texts)
+        print(f"📤 Embedding + storing batch {batch_num}/{total_batches}...", flush=True)
+        batch = chunks[i : i + batch_size]
+        # Explicit ids = the stable chunk ids, so re-indexing upserts in place.
+        vstore.add_documents(batch, ids=[c.id for c in batch])
         print(f"✅ Batch {batch_num}/{total_batches} stored", flush=True)
 
-    return len(docs), len(all_chunks)
+    write_manifest(persist_dir, docs, chunks)
+    return len(docs), len(chunks)
+
+
+# ---------------------------------------------------------------------------
+# Manifest: what is in the index
+# ---------------------------------------------------------------------------
+# A small JSON file next to the index listing the documents it holds, so the
+# UI can show "AI Engineering.pdf — 535 pages, 1,412 chunks" after a reload
+# without scanning the vector store (which Azure Search can't cheaply do).
+MANIFEST_NAME = "documents.json"
+
+
+def write_manifest(persist_dir: Path, docs, chunks) -> None:
+    chunk_counts = Counter(c.metadata.get("source_id") for c in chunks)
+    documents = [
+        {
+            "source_id": d.metadata.get("source_id"),
+            "pages": d.metadata.get("page_count"),
+            "chunks": chunk_counts.get(d.metadata.get("source_id"), 0),
+            "indexed_at": datetime.utcnow().isoformat(),
+        }
+        for d in docs
+    ]
+    Path(persist_dir, MANIFEST_NAME).write_text(json.dumps(documents, indent=2))
+
+
+def read_manifest(persist_dir: Path) -> List[Dict]:
+    """Documents currently in the index ([] if nothing has been indexed)."""
+    path = Path(persist_dir, MANIFEST_NAME)
+    return json.loads(path.read_text()) if path.exists() else []

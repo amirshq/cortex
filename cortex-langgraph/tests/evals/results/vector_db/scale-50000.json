@@ -1,0 +1,59 @@
+{
+  "label": "scale-50000",
+  "created": "2026-10-07 08:42",
+  "vectors": 50000,
+  "real_vectors": 1812,
+  "dims": 3072,
+  "top_k": 10,
+  "embedding_model": "text-embedding-3-large",
+  "rows": [
+    {
+      "db": "chroma",
+      "build_s": 46.28,
+      "disk_mb": 689.4,
+      "p50_ms": 1.85,
+      "p95_ms": 2.24,
+      "overlap@k": 0.99,
+      "recall@1": 0.75,
+      "recall@5": 0.875,
+      "recall@10": 0.875,
+      "mrr": 0.793
+    },
+    {
+      "db": "faiss-flat",
+      "build_s": 1.31,
+      "disk_mb": 614.4,
+      "p50_ms": 12.73,
+      "p95_ms": 14.61,
+      "overlap@k": 1.0,
+      "recall@1": 0.75,
+      "recall@5": 0.875,
+      "recall@10": 0.875,
+      "mrr": 0.793
+    },
+    {
+      "db": "faiss-hnsw",
+      "build_s": 73.91,
+      "disk_mb": 628.0,
+      "p50_ms": 0.2,
+      "p95_ms": 0.33,
+      "overlap@k": 0.917,
+      "recall@1": 0.75,
+      "recall@5": 0.875,
+      "recall@10": 0.875,
+      "mrr": 0.793
+    },
+    {
+      "db": "qdrant-local",
+      "build_s": 64.93,
+      "disk_mb": 1435.7,
+      "p50_ms": 334.37,
+      "p95_ms": 388.19,
+      "overlap@k": 1.0,
+      "recall@1": 0.75,
+      "recall@5": 0.875,
+      "recall@10": 0.875,
+      "mrr": 0.793
+    }
+  ]
+}

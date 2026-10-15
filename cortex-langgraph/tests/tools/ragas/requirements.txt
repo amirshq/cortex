@@ -1,0 +1,15 @@
+# RAGAS runs in its OWN venv, separate from the app's, because installing it into the app's
+# venv would downgrade openai (3.x -> 1.x) and langchain-openai (1.6 -> 1.1), and pull in
+# langchain-community, which the app avoids. RAGAS only reads evals/results/*.json, so it
+# never needs the app's code.
+#
+# From cortex-langgraph/:
+#     python3.11 -m venv tests/tools/ragas/.venv
+#     tests/tools/ragas/.venv/bin/pip install -r tests/tools/ragas/requirements.txt
+ragas==0.4.3
+langchain-openai==1.6.7
+python-dotenv==1.2.4
+
+# ragas 0.4.3 imports langchain_community.chat_models.vertexai at startup, which
+# langchain-community 0.4 removed.
+langchain-community<0.4

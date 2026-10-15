@@ -1,0 +1,1599 @@
+{
+  "label": "qp-hyde",
+  "created": "2026-10-07 08:17",
+  "golden": "/Users/amirshahcheraghian/AI Projects/cortex/cortex-langgraph/tests/evals/data/ai_engineering_golden.json",
+  "config": {
+    "models": {
+      "chat": {
+        "name": "gpt-4o"
+      },
+      "rag": {
+        "name": "gpt-4o-mini",
+        "temperature": 0.0,
+        "max_tokens": 512
+      },
+      "embedding": {
+        "name": "text-embedding-3-large"
+      },
+      "reranker": {
+        "name": "none"
+      },
+      "judge": {
+        "name": "gpt-4o",
+        "temperature": 0
+      }
+    },
+    "rag": {
+      "chunking": {
+        "chunk_size": 800,
+        "chunk_overlap": 100,
+        "strategy": "recursive"
+      },
+      "indexing": {
+        "embedding_batch_size": 500
+      },
+      "retrieval": {
+        "top_k": 10,
+        "top_n": 5,
+        "fallback_policy": "hybrid"
+      },
+      "reranker": {
+        "min_score": null,
+        "device": "cpu",
+        "batch_size": 8,
+        "blend_with_vector_score": false,
+        "blend_alpha": 0.5
+      },
+      "query_processing": "hyde"
+    },
+    "judge": true,
+    "index": {
+      "persist_dir": "data/experiments/embed-large",
+      "chunks": 1812,
+      "chunk_strategy": "table_aware_800_overlap_100"
+    }
+  },
+  "summary": {
+    "answerable": 24,
+    "unanswerable": 6,
+    "index_coverage": 0.958,
+    "recall@1": 0.542,
+    "recall@5": 0.708,
+    "recall@top_k": 0.833,
+    "mrr@top_k": 0.615,
+    "reranker": {
+      "mrr_before": 0.615,
+      "mrr_after": 0.615,
+      "mrr_lift": 0.0,
+      "recall@1_before": 0.542,
+      "recall@1_after": 0.542,
+      "recall@5_before": 0.708,
+      "recall@5_after": 0.708,
+      "improved": 0,
+      "worsened": 0,
+      "unchanged": 24
+    },
+    "context_recall_any": 0.708,
+    "context_recall_all": 0.625,
+    "answer_accuracy": 0.75,
+    "refusal_rate": 1.0,
+    "low_confidence_rate": 0.0,
+    "avg_seconds": 2.897,
+    "latency": {
+      "query": {
+        "mean": 1.756,
+        "p50": 1.567,
+        "p95": 2.748,
+        "share": 0.606
+      },
+      "embed": {
+        "mean": 0.306,
+        "p50": 0.297,
+        "p95": 0.459,
+        "share": 0.106
+      },
+      "search": {
+        "mean": 0.013,
+        "p50": 0.01,
+        "p95": 0.037,
+        "share": 0.004
+      },
+      "rerank": {
+        "mean": 0.0,
+        "p50": 0.0,
+        "p95": 0.001,
+        "share": 0.0
+      },
+      "generate": {
+        "mean": 0.822,
+        "p50": 0.794,
+        "p95": 1.382,
+        "share": 0.284
+      },
+      "total": {
+        "mean": 2.897,
+        "p50": 2.648,
+        "p95": 4.182,
+        "share": 1.0
+      }
+    },
+    "cost": {
+      "models": {
+        "embedding": "text-embedding-3-large",
+        "llm": "gpt-4o-mini"
+      },
+      "avg_embed_tokens": 104.1,
+      "avg_llm_input_tokens": 969.5,
+      "avg_llm_output_tokens": 127.8,
+      "avg_embed_usd": 1.347e-05,
+      "avg_llm_usd": 0.00022207,
+      "avg_usd_per_question": 0.00023553,
+      "embed_share": 0.057,
+      "llm_share": 0.943,
+      "usd_per_1000_questions": 0.2355,
+      "usd_this_run": 0.007066,
+      "index_one_time": {
+        "chunks": 1812,
+        "tokens": 246455,
+        "usd": 0.032039
+      }
+    },
+    "by_type": {
+      "fact": {
+        "n": 6,
+        "recall@5": 0.667,
+        "context_recall": 0.667,
+        "accuracy": 0.833
+      },
+      "numeric": {
+        "n": 5,
+        "recall@5": 1.0,
+        "context_recall": 1.0,
+        "accuracy": 1.0
+      },
+      "table": {
+        "n": 4,
+        "recall@5": 1.0,
+        "context_recall": 1.0,
+        "accuracy": 1.0
+      },
+      "multi-hop": {
+        "n": 5,
+        "recall@5": 0.8,
+        "context_recall": 0.8,
+        "accuracy": 0.8
+      },
+      "paraphrase": {
+        "n": 4,
+        "recall@5": 0.0,
+        "context_recall": 0.0,
+        "accuracy": 0.0
+      }
+    },
+    "top_k": 10,
+    "top_n": 5,
+    "groundedness": {
+      "judge_model": "gpt-4o",
+      "answers_with_claims": 21,
+      "answers_without_claims": 9,
+      "grounded_rate": 0.905,
+      "claim_support_rate": 0.947,
+      "claims": 38,
+      "supported_claims": 36,
+      "ungrounded_ids": [
+        "q20",
+        "q28"
+      ],
+      "judge_usd_this_run": 0.2488
+    },
+    "relevance": {
+      "answered": 21,
+      "answers": 20,
+      "partial": 1,
+      "does_not_answer": 0,
+      "relevance_rate": 0.952,
+      "relevance_score": 0.976,
+      "refused_answerable": [
+        "q02",
+        "q19",
+        "q29"
+      ],
+      "refused_unanswerable": 6,
+      "not_fully_relevant_ids": [
+        "q17"
+      ]
+    }
+  },
+  "results": [
+    {
+      "id": "q01",
+      "type": "fact",
+      "question": "How did Anton Bacaj describe AI engineering to the author?",
+      "answer": "Anton Bacaj described AI engineering as \"just software engineering with AI models thrown in the stack.\"",
+      "confidence": "high",
+      "seconds": 2.449,
+      "latency": {
+        "query": 1.476,
+        "embed": 0.362,
+        "search": 0.008,
+        "rerank": 0.001,
+        "generate": 0.603,
+        "total": 2.449
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 86,
+        "llm_input_tokens": 673,
+        "llm_output_tokens": 102,
+        "embed_usd": 1.1e-05,
+        "llm_usd": 0.000162,
+        "total_usd": 0.000173
+      },
+      "search_queries": [
+        "Anton Bacaj characterized AI engineering as a multidisciplinary field that integrates principles from computer science, data science, and domain-specific knowledge to develop intelligent systems. He emphasized the importance of robust algorithm design, data preprocessing, and model evaluation in creating scalable AI solutions. Bacaj also highlighted the iterative nature of AI engineering, where continuous feedback and refinement are essential for optimizing performance and ensuring the reliability of AI applications in real-world scenarios."
+      ],
+      "groundedness": {
+        "claims": 1,
+        "supported": 1,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer directly provides Anton Bacaj's description of AI engineering."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 4,
+      "reranked_rank": 4,
+      "recall_any@1": false,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q02",
+      "type": "fact",
+      "question": "According to the book, how many epochs of data are large models typically pre-trained on?",
+      "answer": "I don't know.",
+      "confidence": "high",
+      "seconds": 2.146,
+      "latency": {
+        "query": 1.298,
+        "embed": 0.257,
+        "search": 0.013,
+        "rerank": 0.001,
+        "generate": 0.578,
+        "total": 2.146
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 92,
+        "llm_input_tokens": 934,
+        "llm_output_tokens": 97,
+        "embed_usd": 1.2e-05,
+        "llm_usd": 0.000198,
+        "total_usd": 0.00021
+      },
+      "search_queries": [
+        "Large models are typically pre-trained on several epochs of data, often ranging from 10 to 100 epochs, depending on the size of the dataset and the complexity of the model architecture. The choice of the number of epochs is crucial, as it directly influences the model's ability to generalize and avoid overfitting. In practice, techniques such as early stopping and learning rate scheduling are employed to optimize the training process and determine the optimal number of epochs for convergence."
+      ],
+      "groundedness": {
+        "claims": 0,
+        "supported": 0,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "refusal",
+        "reason": "The answer states that the information is not known."
+      },
+      "evidence_in_index": 0.0,
+      "first_rank": null,
+      "reranked_rank": null,
+      "recall_any@1": false,
+      "recall_any@5": false,
+      "recall_any@top_k": false,
+      "evidence_found@top_k": 0.0,
+      "context_recall_any": false,
+      "context_recall_all": false,
+      "correct": false
+    },
+    {
+      "id": "q03",
+      "type": "fact",
+      "question": "Why does the author warn against comparing Azure AI Studio's relevance scores with MLflow's relevance scores?",
+      "answer": "The author warns against comparing Azure AI Studio's relevance scores with MLflow's relevance scores because the criteria and scoring systems used by these tools are not standardized, leading to potential misinterpretation and misuse of the scores.",
+      "confidence": "high",
+      "seconds": 3.696,
+      "latency": {
+        "query": 1.976,
+        "embed": 0.337,
+        "search": 0.007,
+        "rerank": 0.0,
+        "generate": 1.375,
+        "total": 3.696
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 120,
+        "llm_input_tokens": 888,
+        "llm_output_tokens": 163,
+        "embed_usd": 1.6e-05,
+        "llm_usd": 0.000231,
+        "total_usd": 0.000247
+      },
+      "search_queries": [
+        "The author cautions against comparing Azure AI Studio's relevance scores with those generated by MLflow due to fundamental differences in their underlying algorithms and evaluation metrics. Azure AI Studio employs a proprietary scoring mechanism that integrates contextual factors and user behavior analytics, while MLflow typically utilizes standard metrics such as precision, recall, and F1-score based on model performance on a static dataset. These discrepancies can lead to misinterpretations of model efficacy and relevance, as the scores are not directly comparable across platforms. Therefore, it is essential to evaluate each system's scores within its own context to ensure accurate assessments of model performance."
+      ],
+      "groundedness": {
+        "claims": 2,
+        "supported": 2,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer explains why the author warns against comparing the relevance scores of Azure AI Studio and MLflow."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q04",
+      "type": "fact",
+      "question": "What does the author believe is the biggest bottleneck to AI adoption?",
+      "answer": "The author believes that the biggest bottleneck to AI adoption is evaluation, as figuring out evaluation can take up the majority of the development effort.",
+      "confidence": "high",
+      "seconds": 2.543,
+      "latency": {
+        "query": 1.644,
+        "embed": 0.276,
+        "search": 0.008,
+        "rerank": 0.0,
+        "generate": 0.615,
+        "total": 2.543
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 92,
+        "llm_input_tokens": 919,
+        "llm_output_tokens": 121,
+        "embed_usd": 1.2e-05,
+        "llm_usd": 0.00021,
+        "total_usd": 0.000222
+      },
+      "search_queries": [
+        "The author posits that the most significant bottleneck to AI adoption is the lack of robust data governance frameworks. Without comprehensive policies and standards for data quality, privacy, and security, organizations struggle to harness the full potential of AI technologies. Additionally, the scarcity of skilled personnel capable of interpreting and managing AI systems exacerbates this issue, leading to a gap between technological capability and practical implementation. Consequently, addressing these challenges is crucial for facilitating widespread AI integration across various sectors."
+      ],
+      "groundedness": {
+        "claims": 2,
+        "supported": 2,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer directly states what the author believes is the biggest bottleneck to AI adoption."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 9,
+      "reranked_rank": 9,
+      "recall_any@1": false,
+      "recall_any@5": false,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": false,
+      "context_recall_all": false,
+      "correct": true
+    },
+    {
+      "id": "q05",
+      "type": "fact",
+      "question": "According to what some teams told the author, in what format does data work best for their retrieval systems?",
+      "answer": "According to what some teams told the author, data works best for their retrieval systems when it is organized in a question-and-answer format.",
+      "confidence": "high",
+      "seconds": 2.269,
+      "latency": {
+        "query": 1.184,
+        "embed": 0.211,
+        "search": 0.01,
+        "rerank": 0.0,
+        "generate": 0.864,
+        "total": 2.269
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 95,
+        "llm_input_tokens": 986,
+        "llm_output_tokens": 122,
+        "embed_usd": 1.2e-05,
+        "llm_usd": 0.000221,
+        "total_usd": 0.000233
+      },
+      "search_queries": [
+        "In the context of data retrieval systems, teams have reported that structured data formats, such as JSON and XML, facilitate optimal performance due to their hierarchical organization and ease of parsing. These formats enable efficient indexing and querying, allowing for rapid access to specific data elements. Additionally, the use of relational databases with well-defined schemas enhances data integrity and retrieval speed, particularly when combined with optimized indexing strategies. Consequently, adopting these structured formats can significantly improve the overall efficiency of data retrieval processes."
+      ],
+      "groundedness": {
+        "claims": 1,
+        "supported": 1,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer directly states the format in which data works best for retrieval systems according to some teams."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 4,
+      "reranked_rank": 4,
+      "recall_any@1": false,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q06",
+      "type": "fact",
+      "question": "Why does the author consider semantic caching's value more dubious than other caching techniques?",
+      "answer": "The author considers semantic caching's value more dubious than other caching techniques because many of its components are prone to failure, its success relies on high-quality embeddings and a reliable similarity metric, and setting the right similarity threshold can be tricky. Additionally, semantic caching can be time-consuming and compute-intensive, depending on the size of the cached embeddings.",
+      "confidence": "high",
+      "seconds": 3.658,
+      "latency": {
+        "query": 1.976,
+        "embed": 0.338,
+        "search": 0.008,
+        "rerank": 0.0,
+        "generate": 1.335,
+        "total": 3.658
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 133,
+        "llm_input_tokens": 965,
+        "llm_output_tokens": 199,
+        "embed_usd": 1.7e-05,
+        "llm_usd": 0.000264,
+        "total_usd": 0.000281
+      },
+      "search_queries": [
+        "The author considers the value of semantic caching more dubious than other caching techniques due to its reliance on the accuracy and completeness of the underlying data semantics. Unlike traditional caching methods that simply store and retrieve data based on key-value pairs, semantic caching requires a sophisticated understanding of the relationships and context of the data, which can lead to increased complexity and potential inaccuracies. Furthermore, the overhead associated with maintaining semantic metadata and the need for frequent updates to ensure data consistency can diminish the performance benefits typically associated with caching. As a result, the trade-offs between the potential gains in query efficiency and the costs of semantic management render its practical utility less certain compared to more straightforward caching strategies."
+      ],
+      "groundedness": {
+        "claims": 4,
+        "supported": 4,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer directly addresses why the author considers semantic caching's value more dubious."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q07",
+      "type": "numeric",
+      "question": "As of September 2024, what did Amazon SageMaker Ground Truth charge per image for labeling, according to the book?",
+      "answer": "As of September 2024, Amazon SageMaker Ground Truth charges 8 cents per image for labeling fewer than 50,000 images, but only 2 cents per image for labeling more than 1 million images.",
+      "confidence": "high",
+      "seconds": 2.155,
+      "latency": {
+        "query": 0.968,
+        "embed": 0.218,
+        "search": 0.013,
+        "rerank": 0.001,
+        "generate": 0.956,
+        "total": 2.155
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 79,
+        "llm_input_tokens": 1030,
+        "llm_output_tokens": 123,
+        "embed_usd": 1e-05,
+        "llm_usd": 0.000228,
+        "total_usd": 0.000238
+      },
+      "search_queries": [
+        "As of September 2024, Amazon SageMaker Ground Truth charged $0.03 per image for labeling tasks. This pricing structure is designed to facilitate scalable data labeling for machine learning projects, allowing users to efficiently manage costs while ensuring high-quality annotations. Additionally, the service supports various labeling workflows, including automated and human-in-the-loop approaches, to enhance the accuracy and reliability of the labeled datasets."
+      ],
+      "groundedness": {
+        "claims": 2,
+        "supported": 2,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer provides the specific charges per image for labeling as requested."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q08",
+      "type": "numeric",
+      "question": "How many queries does the PAIR attack often need to produce a jailbreak?",
+      "answer": "PAIR often requires fewer than twenty queries to produce a jailbreak.",
+      "confidence": "high",
+      "seconds": 2.364,
+      "latency": {
+        "query": 1.28,
+        "embed": 0.395,
+        "search": 0.013,
+        "rerank": 0.0,
+        "generate": 0.675,
+        "total": 2.364
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 105,
+        "llm_input_tokens": 1015,
+        "llm_output_tokens": 115,
+        "embed_usd": 1.4e-05,
+        "llm_usd": 0.000221,
+        "total_usd": 0.000235
+      },
+      "search_queries": [
+        "The PAIR (Prompting Attacks for Interactive Response) attack typically requires a varying number of queries to successfully produce a jailbreak, often ranging from 50 to 200 queries. This variability is influenced by factors such as the complexity of the target model, the specificity of the prompts used, and the inherent robustness of the model's defenses against adversarial inputs. In practice, the iterative nature of the attack allows for refinement of prompts based on previous responses, thereby optimizing the query count needed to achieve a successful jailbreak."
+      ],
+      "groundedness": {
+        "claims": 1,
+        "supported": 1,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer provides the specific number of queries needed, as requested."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q09",
+      "type": "numeric",
+      "question": "How many bits does the TF32 format actually occupy?",
+      "answer": "TF32 actually has 19 bits.",
+      "confidence": "high",
+      "seconds": 2.536,
+      "latency": {
+        "query": 1.52,
+        "embed": 0.31,
+        "search": 0.009,
+        "rerank": 0.0,
+        "generate": 0.697,
+        "total": 2.536
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 95,
+        "llm_input_tokens": 994,
+        "llm_output_tokens": 103,
+        "embed_usd": 1.2e-05,
+        "llm_usd": 0.000211,
+        "total_usd": 0.000223
+      },
+      "search_queries": [
+        "The TensorFloat-32 (TF32) format occupies 32 bits in total. It is designed to provide a balance between the precision of FP32 and the performance of lower precision formats. TF32 utilizes 1 bit for the sign, 8 bits for the exponent, and 23 bits for the significand, with the significand being effectively represented with an implicit leading bit, allowing for enhanced computational efficiency in deep learning applications while maintaining sufficient precision for training neural networks."
+      ],
+      "groundedness": {
+        "claims": 1,
+        "supported": 1,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer directly provides the number of bits in the TF32 format."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q10",
+      "type": "numeric",
+      "question": "In the LIMA study cited by the book, in what percentage of cases were the finetuned model's answers equivalent or strictly preferred to GPT-4?",
+      "answer": "In the LIMA study, the finetuned model's answers were equivalent or strictly preferred to GPT-4 in 43% of cases.",
+      "confidence": "high",
+      "seconds": 2.46,
+      "latency": {
+        "query": 1.289,
+        "embed": 0.248,
+        "search": 0.012,
+        "rerank": 0.0,
+        "generate": 0.911,
+        "total": 2.46
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 93,
+        "llm_input_tokens": 969,
+        "llm_output_tokens": 120,
+        "embed_usd": 1.2e-05,
+        "llm_usd": 0.000217,
+        "total_usd": 0.000229
+      },
+      "search_queries": [
+        "In the LIMA study, the finetuned model demonstrated a significant performance enhancement, with its answers being equivalent or strictly preferred to those generated by GPT-4 in approximately 70% of the evaluated cases. This finding underscores the effectiveness of finetuning in aligning model outputs with user expectations and improving overall response quality. The study highlights the potential for specialized training to yield models that not only match but often exceed the capabilities of larger, more generalized architectures."
+      ],
+      "groundedness": {
+        "claims": 1,
+        "supported": 1,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer provides the specific percentage requested by the question."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q11",
+      "type": "numeric",
+      "question": "In the book's MBU example, what bandwidth does a 7B-parameter FP16 model at 100 tokens/s use, and what is the MBU on an A100-80GB?",
+      "answer": "The bandwidth used by a 7B-parameter FP16 model at 100 tokens/s is 700 GB/s. The MBU on an A100-80GB, with a theoretical bandwidth of 2 TB/s, is 70%.",
+      "confidence": "high",
+      "seconds": 4.182,
+      "latency": {
+        "query": 2.508,
+        "embed": 0.623,
+        "search": 0.009,
+        "rerank": 0.001,
+        "generate": 1.041,
+        "total": 4.182
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 178,
+        "llm_input_tokens": 1218,
+        "llm_output_tokens": 228,
+        "embed_usd": 2.3e-05,
+        "llm_usd": 0.000319,
+        "total_usd": 0.000342
+      },
+      "search_queries": [
+        "In the context of a 7B-parameter FP16 model operating at a throughput of 100 tokens per second, the required bandwidth can be calculated based on the model's parameter size and the frequency of data transfer. Each FP16 parameter occupies 2 bytes, resulting in a total model size of approximately 14 MB (7 billion parameters x 2 bytes). Consequently, at 100 tokens per second, assuming each token requires a forward pass through the model, the bandwidth requirement would be approximately 1.4 GB/s. Regarding the Memory Bandwidth Utilization (MBU) on an NVIDIA A100-80GB GPU, the MBU can be estimated by comparing the effective memory bandwidth of the A100, which is around 1.6 TB/s, to the bandwidth required for the model's operations, yielding an MBU of approximately 0.09% under these conditions."
+      ],
+      "groundedness": {
+        "claims": 2,
+        "supported": 2,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer provides both the bandwidth used and the MBU on an A100-80GB, as asked in the question."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q12",
+      "type": "table",
+      "question": "According to the book's table of Llama model dimensions, how many transformer blocks does Llama 3-405B have?",
+      "answer": "Llama 3-405B has 126 transformer blocks.",
+      "confidence": "high",
+      "seconds": 2.207,
+      "latency": {
+        "query": 1.36,
+        "embed": 0.214,
+        "search": 0.014,
+        "rerank": 0.001,
+        "generate": 0.618,
+        "total": 2.207
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 74,
+        "llm_input_tokens": 1059,
+        "llm_output_tokens": 87,
+        "embed_usd": 1e-05,
+        "llm_usd": 0.000211,
+        "total_usd": 0.000221
+      },
+      "search_queries": [
+        "The Llama 3-405B model comprises 40 transformer blocks, each designed to facilitate the model's deep learning capabilities through attention mechanisms and feedforward networks. This architecture allows for enhanced representation learning and improved performance on a variety of natural language processing tasks. The configuration of these transformer blocks is critical for optimizing the model's capacity to process and generate human-like text."
+      ],
+      "groundedness": {
+        "claims": 1,
+        "supported": 1,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer provides the specific number of transformer blocks for Llama 3-405B as requested."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q13",
+      "type": "table",
+      "question": "Per the OpenAI estimate shown in the book, roughly how many evaluation samples are needed to detect a 1% score difference with 95% confidence?",
+      "answer": "Roughly 10,000 evaluation samples are needed to detect a 1% score difference with 95% confidence.",
+      "confidence": "high",
+      "seconds": 3.922,
+      "latency": {
+        "query": 2.748,
+        "embed": 0.29,
+        "search": 0.011,
+        "rerank": 0.0,
+        "generate": 0.873,
+        "total": 3.922
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 169,
+        "llm_input_tokens": 922,
+        "llm_output_tokens": 192,
+        "embed_usd": 2.2e-05,
+        "llm_usd": 0.000253,
+        "total_usd": 0.000275
+      },
+      "search_queries": [
+        "To detect a 1% score difference with 95% confidence, the required number of evaluation samples can be estimated using the formula for sample size in hypothesis testing. Specifically, the sample size \\( n \\) can be calculated using the equation \\( n = \\left( \\frac{Z_{\\alpha/2} \\cdot \\sigma}{d} \\right)^2 \\), where \\( Z_{\\alpha/2} \\) is the critical value for a 95% confidence level (approximately 1.96), \\( \\sigma \\) is the standard deviation of the scores, and \\( d \\) is the minimum detectable effect size (in this case, 0.01). Assuming a standard deviation of 0.5, the calculation yields a sample size of approximately 384 samples to achieve the desired statistical power."
+      ],
+      "groundedness": {
+        "claims": 1,
+        "supported": 1,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer provides the specific number of evaluation samples needed as requested."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q14",
+      "type": "table",
+      "question": "How much memory does a LoRA adapter for GPT-3 (175B) need in 16 bits, compared with the model's weights?",
+      "answer": "A LoRA adapter for GPT-3 (175B) needs 37.7 MB in 16 bits, compared to the model's weights which require 350 GB.",
+      "confidence": "high",
+      "seconds": 6.559,
+      "latency": {
+        "query": 5.091,
+        "embed": 0.334,
+        "search": 0.018,
+        "rerank": 0.004,
+        "generate": 1.112,
+        "total": 6.559
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 154,
+        "llm_input_tokens": 899,
+        "llm_output_tokens": 188,
+        "embed_usd": 2e-05,
+        "llm_usd": 0.000248,
+        "total_usd": 0.000268
+      },
+      "search_queries": [
+        "A LoRA (Low-Rank Adaptation) adapter for a model like GPT-3, which has 175 billion parameters, typically requires significantly less memory than the full model weights. When using 16-bit precision, the full model weights would occupy approximately 350 GB (175 billion parameters \u00d7 2 bytes per parameter). In contrast, a LoRA adapter generally consists of a small set of low-rank matrices, which can be on the order of 0.1% to 1% of the total parameters, resulting in a memory footprint of around 350 MB to 3.5 GB, depending on the specific rank chosen for the adaptation. This substantial reduction in memory usage makes LoRA adapters an efficient solution for fine-tuning large language models."
+      ],
+      "groundedness": {
+        "claims": 2,
+        "supported": 2,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer provides the memory needed for both the LoRA adapter and the model's weights, as requested."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q15",
+      "type": "table",
+      "question": "In the FITS feedback clustering table, which feedback type was most common and what share did it represent?",
+      "answer": "The most common feedback type in the FITS feedback clustering table is \"Clarify their demand again,\" which represented 26.54%.",
+      "confidence": "high",
+      "seconds": 2.383,
+      "latency": {
+        "query": 1.155,
+        "embed": 0.3,
+        "search": 0.047,
+        "rerank": 0.001,
+        "generate": 0.881,
+        "total": 2.383
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 84,
+        "llm_input_tokens": 938,
+        "llm_output_tokens": 111,
+        "embed_usd": 1.1e-05,
+        "llm_usd": 0.000207,
+        "total_usd": 0.000218
+      },
+      "search_queries": [
+        "In the FITS feedback clustering table, the most prevalent feedback type was identified as \"Positive Feedback,\" which accounted for approximately 62% of the total entries. This dominance indicates a significant inclination towards favorable responses within the dataset, suggesting that users are more likely to provide positive reinforcement in their feedback. The analysis of this clustering not only highlights user satisfaction but also informs potential areas for enhancement in product development and customer engagement strategies."
+      ],
+      "groundedness": {
+        "claims": 2,
+        "supported": 2,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer provides both the most common feedback type and its share, as requested."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q16",
+      "type": "multi-hop",
+      "question": "Anthropic is cited both for a chunk-contextualization technique and for prompt caching. How long is the context Anthropic generates per chunk, and what maximum cost savings does its prompt caching promise?",
+      "answer": "Anthropic generates a context of 50-100 tokens per chunk and promises up to 90% cost savings with its prompt caching.",
+      "confidence": "high",
+      "seconds": 2.504,
+      "latency": {
+        "query": 1.539,
+        "embed": 0.246,
+        "search": 0.016,
+        "rerank": 0.0,
+        "generate": 0.703,
+        "total": 2.504
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 87,
+        "llm_input_tokens": 1009,
+        "llm_output_tokens": 114,
+        "embed_usd": 1.1e-05,
+        "llm_usd": 0.00022,
+        "total_usd": 0.000231
+      },
+      "search_queries": [
+        "Anthropic's chunk-contextualization technique generates context windows of up to 32,768 tokens per chunk, allowing for extensive information retention and processing in a single interaction. Additionally, their prompt caching mechanism is designed to optimize computational efficiency, promising potential cost savings of up to 50% by reusing previously computed embeddings and reducing redundant processing during model inference. This dual approach enhances both the performance and economic viability of large language model applications."
+      ],
+      "groundedness": {
+        "claims": 2,
+        "supported": 2,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer provides both the context length and the maximum cost savings as requested."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q17",
+      "type": "multi-hop",
+      "question": "How many tokens did Meta train Llama 3 on, and how does Llama 3's vocabulary size compare with Llama 2's in the book's dimension table?",
+      "answer": "Meta trained Llama 3 on 15 trillion tokens. The context does not provide information about Llama 3's vocabulary size compared to Llama 2's.",
+      "confidence": "high",
+      "seconds": 3.577,
+      "latency": {
+        "query": 1.96,
+        "embed": 0.459,
+        "search": 0.009,
+        "rerank": 0.0,
+        "generate": 1.149,
+        "total": 3.577
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 98,
+        "llm_input_tokens": 1043,
+        "llm_output_tokens": 132,
+        "embed_usd": 1.3e-05,
+        "llm_usd": 0.000236,
+        "total_usd": 0.000249
+      },
+      "search_queries": [
+        "Meta trained Llama 3 on approximately 1 trillion tokens, significantly enhancing its training dataset compared to Llama 2, which was trained on around 300 billion tokens. In terms of vocabulary size, Llama 3 features an expanded vocabulary of 65,000 tokens, compared to Llama 2's vocabulary of 50,000 tokens. This increase in vocabulary size allows Llama 3 to better capture nuanced language patterns and improve its overall performance in natural language processing tasks."
+      ],
+      "groundedness": {
+        "claims": 2,
+        "supported": 2,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "partial",
+        "reason": "The answer provides the number of tokens but not the vocabulary size comparison."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": false,
+      "correct": true
+    },
+    {
+      "id": "q18",
+      "type": "multi-hop",
+      "question": "How many tools did Chameleon use and how much did it improve the best published few-shot result on ScienceQA, compared with how many tools Toolformer learned?",
+      "answer": "Chameleon used 13 tools and improved the best published few-shot result on ScienceQA by 11.37%. Toolformer learned 5 tools.",
+      "confidence": "high",
+      "seconds": 2.634,
+      "latency": {
+        "query": 1.381,
+        "embed": 0.268,
+        "search": 0.01,
+        "rerank": 0.0,
+        "generate": 0.974,
+        "total": 2.634
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 92,
+        "llm_input_tokens": 1035,
+        "llm_output_tokens": 122,
+        "embed_usd": 1.2e-05,
+        "llm_usd": 0.000228,
+        "total_usd": 0.00024
+      },
+      "search_queries": [
+        "Chameleon utilized a total of five distinct tools to enhance its performance on the ScienceQA benchmark. This strategic integration resulted in a significant improvement, surpassing the best published few-shot result by approximately 12 percentage points. In contrast, Toolformer, which employed a more extensive learning mechanism, was trained on a diverse set of 10 tools, allowing it to adaptively select and utilize the most relevant tools for specific tasks, thereby optimizing its performance across various datasets."
+      ],
+      "groundedness": {
+        "claims": 3,
+        "supported": 3,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer provides the number of tools used by Chameleon and Toolformer, as well as the improvement percentage on ScienceQA."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 3,
+      "reranked_rank": 3,
+      "recall_any@1": false,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q19",
+      "type": "multi-hop",
+      "question": "On the current-events QA study cited in the book, what score did Mistral-7B reach with RAG, and how large can vector database spending get relative to model API spending?",
+      "answer": "I don't know.",
+      "confidence": "high",
+      "seconds": 2.848,
+      "latency": {
+        "query": 1.969,
+        "embed": 0.351,
+        "search": 0.007,
+        "rerank": 0.0,
+        "generate": 0.52,
+        "total": 2.848
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 104,
+        "llm_input_tokens": 992,
+        "llm_output_tokens": 108,
+        "embed_usd": 1.4e-05,
+        "llm_usd": 0.000214,
+        "total_usd": 0.000228
+      },
+      "search_queries": [
+        "In the current-events QA study referenced in the book, Mistral-7B achieved a score of 82.5% accuracy when evaluated using Retrieval-Augmented Generation (RAG) techniques. As for the financial implications, vector database expenditures can potentially exceed model API spending by a factor of 2 to 3 times, particularly as the demand for real-time data retrieval and processing increases in large-scale AI applications. This trend underscores the growing importance of efficient data management systems in enhancing the performance of generative models."
+      ],
+      "groundedness": {
+        "claims": 0,
+        "supported": 0,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "refusal",
+        "reason": "The answer states that the information is not known."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 7,
+      "reranked_rank": 7,
+      "recall_any@1": false,
+      "recall_any@5": false,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 0.5,
+      "context_recall_any": false,
+      "context_recall_all": false,
+      "correct": false
+    },
+    {
+      "id": "q20",
+      "type": "multi-hop",
+      "question": "The book's semantic cache stores embeddings of cached queries in a vector database. If those embeddings came from OpenAI's text-embedding-3-large, how many dimensions would each have?",
+      "answer": "Each embedding from OpenAI's text-embedding-3-large would have 3072 dimensions.",
+      "confidence": "high",
+      "seconds": 3.453,
+      "latency": {
+        "query": 2.255,
+        "embed": 0.301,
+        "search": 0.01,
+        "rerank": 0.0,
+        "generate": 0.887,
+        "total": 3.453
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 76,
+        "llm_input_tokens": 941,
+        "llm_output_tokens": 95,
+        "embed_usd": 1e-05,
+        "llm_usd": 0.000198,
+        "total_usd": 0.000208
+      },
+      "search_queries": [
+        "The embeddings generated by OpenAI's text-embedding-ada-003 model, which is the latest in the series, consist of 1536 dimensions. This high-dimensional representation allows for nuanced semantic understanding and efficient retrieval of similar queries within the semantic cache. Each embedding encapsulates the contextual meaning of the input text, facilitating advanced search and recommendation functionalities in applications leveraging the vector database."
+      ],
+      "groundedness": {
+        "claims": 1,
+        "supported": 0,
+        "grounded": false,
+        "unsupported": [
+          "Each embedding from OpenAI's text-embedding-3-large would have 3072 dimensions."
+        ]
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer provides the specific number of dimensions requested."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 2,
+      "reranked_rank": 2,
+      "recall_any@1": false,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": false,
+      "correct": true
+    },
+    {
+      "id": "q21",
+      "type": "unanswerable",
+      "question": "What similarity threshold does the author recommend for semantic caching?",
+      "answer": "I don't know.",
+      "confidence": "high",
+      "seconds": 2.22,
+      "latency": {
+        "query": 1.502,
+        "embed": 0.245,
+        "search": 0.007,
+        "rerank": 0.0,
+        "generate": 0.465,
+        "total": 2.22
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 88,
+        "llm_input_tokens": 913,
+        "llm_output_tokens": 92,
+        "embed_usd": 1.1e-05,
+        "llm_usd": 0.000192,
+        "total_usd": 0.000203
+      },
+      "search_queries": [
+        "In the context of semantic caching, the author recommends a similarity threshold of 0.7, which is derived from empirical evaluations of query performance and cache hit rates. This threshold balances the trade-off between retrieval accuracy and cache efficiency, ensuring that semantically similar queries can leverage cached results without significantly compromising the relevance of the returned data. By employing this threshold, systems can optimize resource utilization while maintaining a high level of user satisfaction in query responses."
+      ],
+      "groundedness": {
+        "claims": 0,
+        "supported": 0,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "refusal",
+        "reason": "The answer states that the information is not known."
+      },
+      "refused": true
+    },
+    {
+      "id": "q22",
+      "type": "unanswerable",
+      "question": "How much does Anthropic charge per million tokens per hour for prompt cache storage?",
+      "answer": "I don't know.",
+      "confidence": "high",
+      "seconds": 2.67,
+      "latency": {
+        "query": 1.567,
+        "embed": 0.297,
+        "search": 0.011,
+        "rerank": 0.0,
+        "generate": 0.794,
+        "total": 2.67
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 80,
+        "llm_input_tokens": 1016,
+        "llm_output_tokens": 84,
+        "embed_usd": 1e-05,
+        "llm_usd": 0.000203,
+        "total_usd": 0.000213
+      },
+      "search_queries": [
+        "As of October 2023, Anthropic charges $0.0004 per million tokens per hour for prompt cache storage. This pricing model is designed to optimize the efficiency of token retrieval and storage, allowing users to manage their computational resources effectively while leveraging the capabilities of the Claude AI models. Users should consider this cost in conjunction with their overall usage patterns to ensure optimal budget allocation for their AI applications."
+      ],
+      "groundedness": {
+        "claims": 0,
+        "supported": 0,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "refusal",
+        "reason": "The answer states it does not know the information requested."
+      },
+      "refused": true
+    },
+    {
+      "id": "q23",
+      "type": "unanswerable",
+      "question": "How many GPU hours were needed to finetune the 65B Llama model in the LIMA study?",
+      "answer": "I don't know.",
+      "confidence": "high",
+      "seconds": 2.125,
+      "latency": {
+        "query": 1.317,
+        "embed": 0.33,
+        "search": 0.008,
+        "rerank": 0.0,
+        "generate": 0.471,
+        "total": 2.125
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 78,
+        "llm_input_tokens": 1017,
+        "llm_output_tokens": 82,
+        "embed_usd": 1e-05,
+        "llm_usd": 0.000202,
+        "total_usd": 0.000212
+      },
+      "search_queries": [
+        "In the LIMA study, the fine-tuning of the 65 billion parameter Llama model required approximately 1,000 GPU hours. This extensive computational resource was utilized to optimize the model's performance on specific tasks, leveraging high-performance GPUs to accelerate the training process. The choice of hardware and the efficiency of the training algorithms played a crucial role in achieving the desired outcomes within this timeframe."
+      ],
+      "groundedness": {
+        "claims": 0,
+        "supported": 0,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "refusal",
+        "reason": "The answer states that the information is not known."
+      },
+      "refused": true
+    },
+    {
+      "id": "q24",
+      "type": "unanswerable",
+      "question": "By how much did Chameleon improve accuracy on the MMLU benchmark?",
+      "answer": "I don't know.",
+      "confidence": "high",
+      "seconds": 2.648,
+      "latency": {
+        "query": 1.881,
+        "embed": 0.227,
+        "search": 0.009,
+        "rerank": 0.0,
+        "generate": 0.53,
+        "total": 2.648
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 111,
+        "llm_input_tokens": 1050,
+        "llm_output_tokens": 115,
+        "embed_usd": 1.4e-05,
+        "llm_usd": 0.000226,
+        "total_usd": 0.00024
+      },
+      "search_queries": [
+        "Chameleon, a state-of-the-art language model, demonstrated a significant enhancement in accuracy on the MMLU (Massive Multitask Language Understanding) benchmark, achieving an improvement of approximately 5.2 percentage points over its predecessor models. This advancement is attributed to its innovative architecture and training methodologies, which leverage a diverse range of tasks to enhance generalization capabilities. The model's performance on the MMLU benchmark underscores its efficacy in understanding and generating human-like text across various domains, thereby setting a new standard in the field of natural language processing."
+      ],
+      "groundedness": {
+        "claims": 0,
+        "supported": 0,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "refusal",
+        "reason": "The answer states it does not know the information requested."
+      },
+      "refused": true
+    },
+    {
+      "id": "q25",
+      "type": "unanswerable",
+      "question": "What did BloombergGPT's training data cost?",
+      "answer": "I don't know.",
+      "confidence": "high",
+      "seconds": 1.759,
+      "latency": {
+        "query": 1.084,
+        "embed": 0.238,
+        "search": 0.037,
+        "rerank": 0.001,
+        "generate": 0.4,
+        "total": 1.759
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 84,
+        "llm_input_tokens": 993,
+        "llm_output_tokens": 87,
+        "embed_usd": 1.1e-05,
+        "llm_usd": 0.000201,
+        "total_usd": 0.000212
+      },
+      "search_queries": [
+        "The training data for BloombergGPT, a large language model developed by Bloomberg, was estimated to cost approximately $50 million. This figure encompasses the acquisition of diverse financial datasets, preprocessing expenses, and the computational resources required for training the model. The investment reflects the necessity of high-quality, domain-specific data to enhance the model's performance in financial applications, ensuring it can effectively understand and generate relevant insights in the financial sector."
+      ],
+      "groundedness": {
+        "claims": 0,
+        "supported": 0,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "refusal",
+        "reason": "The answer states that the information is not known."
+      },
+      "refused": true
+    },
+    {
+      "id": "q26",
+      "type": "unanswerable",
+      "question": "What MFU did Meta achieve when training Llama 3 405B?",
+      "answer": "I don't know.",
+      "confidence": "high",
+      "seconds": 2.762,
+      "latency": {
+        "query": 2.021,
+        "embed": 0.285,
+        "search": 0.014,
+        "rerank": 0.001,
+        "generate": 0.441,
+        "total": 2.762
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 100,
+        "llm_input_tokens": 994,
+        "llm_output_tokens": 104,
+        "embed_usd": 1.3e-05,
+        "llm_usd": 0.000212,
+        "total_usd": 0.000225
+      },
+      "search_queries": [
+        "Meta achieved a significant milestone in model fine-tuning and efficiency with the Llama 3 405B, reaching a maximum fine-tuning utilization (MFU) of 92%. This high MFU indicates that the model was able to effectively leverage its parameters during the training process, optimizing both computational resources and training time. The architecture enhancements and training methodologies employed contributed to this efficiency, allowing for improved performance on a variety of natural language processing tasks while maintaining a lower carbon footprint compared to previous iterations."
+      ],
+      "groundedness": {
+        "claims": 0,
+        "supported": 0,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "refusal",
+        "reason": "The answer states that the information is not known."
+      },
+      "refused": true
+    },
+    {
+      "id": "q27",
+      "type": "paraphrase",
+      "question": "When customizing a language model, which method does the author say should shape how responses look, and which should supply the information in them?",
+      "answer": "The author states that prompt engineering should shape how responses look, while the context should supply the information in them.",
+      "confidence": "high",
+      "seconds": 2.671,
+      "latency": {
+        "query": 1.685,
+        "embed": 0.336,
+        "search": 0.007,
+        "rerank": 0.0,
+        "generate": 0.643,
+        "total": 2.671
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 94,
+        "llm_input_tokens": 861,
+        "llm_output_tokens": 115,
+        "embed_usd": 1.2e-05,
+        "llm_usd": 0.000198,
+        "total_usd": 0.00021
+      },
+      "search_queries": [
+        "When customizing a language model, the author emphasizes that the prompt engineering method should shape the structure and style of the responses, while fine-tuning should supply the substantive information contained within them. Prompt engineering involves crafting specific queries or instructions that guide the model's output format, ensuring clarity and relevance. In contrast, fine-tuning adjusts the model's parameters based on a curated dataset, enhancing its ability to generate contextually accurate and informative responses aligned with the desired knowledge domain."
+      ],
+      "groundedness": {
+        "claims": 2,
+        "supported": 2,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer directly addresses both parts of the question."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": null,
+      "reranked_rank": null,
+      "recall_any@1": false,
+      "recall_any@5": false,
+      "recall_any@top_k": false,
+      "evidence_found@top_k": 0.0,
+      "context_recall_any": false,
+      "context_recall_all": false,
+      "correct": false
+    },
+    {
+      "id": "q28",
+      "type": "paraphrase",
+      "question": "If a person fixes the code an assistant wrote, how can that correction be turned into a signal for aligning the system with what people want?",
+      "answer": "If a person fixes the code an assistant wrote, that correction can be turned into a signal for aligning the system with what people want by indicating that the original code was not quite right. This strong signal suggests that the model should learn from the correction to improve future code generation.",
+      "confidence": "high",
+      "seconds": 3.677,
+      "latency": {
+        "query": 1.723,
+        "embed": 0.293,
+        "search": 0.013,
+        "rerank": 0.001,
+        "generate": 1.647,
+        "total": 3.677
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 118,
+        "llm_input_tokens": 964,
+        "llm_output_tokens": 172,
+        "embed_usd": 1.5e-05,
+        "llm_usd": 0.000248,
+        "total_usd": 0.000263
+      },
+      "search_queries": [
+        "To effectively utilize corrections made by a user on an assistant-generated code, the system can implement a feedback loop mechanism. This involves capturing the modifications as explicit signals of user intent and preference, which can then be analyzed through machine learning algorithms to identify patterns in user corrections. By integrating these insights into the model's training data, the system can refine its output generation process, thereby aligning more closely with user expectations and enhancing overall performance. Additionally, employing reinforcement learning techniques can further optimize the assistant's responses based on the frequency and context of user corrections, ensuring continuous improvement in alignment with user needs."
+      ],
+      "groundedness": {
+        "claims": 2,
+        "supported": 1,
+        "grounded": false,
+        "unsupported": [
+          "This strong signal suggests that the model should learn from the correction to improve future code generation."
+        ]
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer explains how a correction can be used as a signal for system alignment."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 6,
+      "reranked_rank": 6,
+      "recall_any@1": false,
+      "recall_any@5": false,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": false,
+      "context_recall_all": false,
+      "correct": false
+    },
+    {
+      "id": "q29",
+      "type": "paraphrase",
+      "question": "Which unglamorous chore did one of the people who started a well-known AI lab say pays off the most relative to the credit it earns?",
+      "answer": "I don't know.",
+      "confidence": "high",
+      "seconds": 2.752,
+      "latency": {
+        "query": 1.857,
+        "embed": 0.359,
+        "search": 0.006,
+        "rerank": 0.0,
+        "generate": 0.53,
+        "total": 2.752
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 142,
+        "llm_input_tokens": 895,
+        "llm_output_tokens": 146,
+        "embed_usd": 1.8e-05,
+        "llm_usd": 0.000222,
+        "total_usd": 0.00024
+      },
+      "search_queries": [
+        "In a candid reflection on the often-overlooked aspects of research and development, one of the co-founders of a prominent AI lab highlighted that the unglamorous task of data cleaning yields the most significant returns relative to the credit it receives. This foundational chore involves the meticulous process of curating, annotating, and refining datasets to ensure their quality and relevance for training machine learning models. Despite its tedious nature, effective data cleaning is critical for enhancing model performance and reliability, ultimately serving as the bedrock upon which successful AI applications are built. Thus, while it may lack the allure of cutting-edge algorithm design, the impact of diligent data preparation is profound and far-reaching in the field of artificial intelligence."
+      ],
+      "groundedness": {
+        "claims": 0,
+        "supported": 0,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "refusal",
+        "reason": "The answer states that the information is not known."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": null,
+      "reranked_rank": null,
+      "recall_any@1": false,
+      "recall_any@5": false,
+      "recall_any@top_k": false,
+      "evidence_found@top_k": 0.0,
+      "context_recall_any": false,
+      "context_recall_all": false,
+      "correct": false
+    },
+    {
+      "id": "q30",
+      "type": "paraphrase",
+      "question": "Some say crafting instructions for chatbots isn't a real discipline. How does the author think that work should be carried out?",
+      "answer": "The author believes that crafting instructions for chatbots, or prompt engineering, is a form of human-AI communication that requires clear instructions, examples, and relevant information to be effective. It is important to consider the quirks and biases of AI models for a productive relationship. The author emphasizes that while it may be easy to start, doing it well is not straightforward and requires thoughtful engagement.",
+      "confidence": "high",
+      "seconds": 3.088,
+      "latency": {
+        "query": 1.456,
+        "embed": 0.236,
+        "search": 0.014,
+        "rerank": 0.001,
+        "generate": 1.382,
+        "total": 3.088
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 121,
+        "llm_input_tokens": 953,
+        "llm_output_tokens": 196,
+        "embed_usd": 1.6e-05,
+        "llm_usd": 0.000261,
+        "total_usd": 0.000277
+      },
+      "search_queries": [
+        "Crafting instructions for chatbots, often referred to as conversational design, is a critical discipline that requires a deep understanding of user experience, linguistics, and artificial intelligence. The author posits that this work should be carried out through a systematic approach that includes user research, persona development, and iterative prototyping. By employing techniques such as journey mapping and dialogue flow analysis, designers can create intuitive and contextually relevant interactions that enhance user engagement and satisfaction. Ultimately, the effectiveness of a chatbot hinges on the precision and clarity of its instructional design, making it an essential component of modern digital communication strategies."
+      ],
+      "groundedness": {
+        "claims": 3,
+        "supported": 3,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer explains how the author thinks crafting instructions for chatbots should be carried out."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": null,
+      "reranked_rank": null,
+      "recall_any@1": false,
+      "recall_any@5": false,
+      "recall_any@top_k": false,
+      "evidence_found@top_k": 0.0,
+      "context_recall_any": false,
+      "context_recall_all": false,
+      "correct": false
+    }
+  ]
+}

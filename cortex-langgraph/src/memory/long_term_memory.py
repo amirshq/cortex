@@ -1,39 +1,46 @@
-# No specific long‑term memory service is hard‑coded in long_term_memory.py.
-# Replace it with Letta Long Term Memory or Langchain long term memory
-from typing import List, Dict, TYPE_CHECKING
-from datetime import datetime
+"""Long-term (semantic) memory — LangChain edition.
 
-# Type checking only - avoids circular imports
-if TYPE_CHECKING:
-    from src.memory.vectordb import ConversationVectorStoreBase
+Same memory semantics as cortex-core (remember / recall / forget, scoped per
+user), but the storage is any LangChain `VectorStore` instead of a hand-written
+adapter, and chunking uses LangChain's `RecursiveCharacterTextSplitter`.
+
+The vector store embeds text itself, so this class no longer needs an
+embedder of its own — that dependency moved into the store.
+"""
+
+from datetime import datetime
+from typing import Dict, List, Optional
+
+from langchain_core.documents import Document
+from langchain_core.vectorstores import VectorStore
+from langchain_text_splitters import RecursiveCharacterTextSplitter, TextSplitter
 
 
 class LongTermMemory:
     """
     Cognitive long-term memory layer.
     Owns memory semantics, not storage.
-
-    Uses dependency injection - vectordb, embedder, and chunker are passed in,not imported.
-    This makes the code more flexible and testable.
+    Uses dependency injection - the vector store (and optionally the text
+    splitter) are passed in, not imported. This makes the code more flexible
+    and testable.
     """
 
     def __init__(
         self,
-        vectordb: "ConversationVectorStoreBase",  # Type hint (string to avoid circular import)
-        embedder,  # Object with embed() method
-        chunker,   # Object with split() method
+        vectorstore: VectorStore,
+        text_splitter: Optional[TextSplitter] = None,
     ):
         """
-        Initialize long-term memory.
-        
         Args:
-            vectordb: Vector database instance (from src.memory.vectordb.VectorDB)
-            embedder: Embedding model (must have embed(text: str) or embed_query(text: str) method)
-            chunker: Text chunker (must have split(text: str) method)
+            vectorstore: Any LangChain VectorStore that supports metadata
+                         filtering on `user_id` (Chroma does).
+            text_splitter: Used only by remember(); conversation turns are
+                           stored whole. Defaults to a 1000-char recursive splitter.
         """
-        self.vectordb = vectordb
-        self.embedder = embedder
-        self.chunker = chunker
+        self.vectorstore = vectorstore
+        self.text_splitter = text_splitter or RecursiveCharacterTextSplitter(
+            chunk_size=1000, chunk_overlap=100
+        )
 
     def remember(
         self,
@@ -42,27 +49,18 @@ class LongTermMemory:
         memory_type: str = "knowledge",
         importance: int = 1,
     ) -> None:
-
         """
-        chunk the information, embed each chunk, store in vectordb with metadata
-        Store information in long-term memory using a pluggable chunking strategy.
+        Store information in long-term memory: split it into chunks and store
+        each chunk with user-scoped metadata (the store embeds them).
         """
-        chunks = self.chunker.split(content)
-
-        for chunk in chunks:
-            embedding = self.embedder.embed(chunk)
-
-            self.vectordb.add(
-                ids=[self._build_id(user_id)],
-                embeddings=[embedding],
-                documents=[chunk],
-                metadatas=[{
-                    "user_id": user_id,
-                    "type": memory_type,
-                    "importance": importance,
-                    "created_at": datetime.utcnow().isoformat(),
-                }],
-            )
+        chunks = self.text_splitter.split_text(content)
+        if not chunks:
+            return
+        docs = [
+            Document(page_content=chunk, metadata=self._metadata(user_id, memory_type, importance))
+            for chunk in chunks
+        ]
+        self.vectorstore.add_documents(docs, ids=[self._build_id(user_id, i) for i in range(len(docs))])
 
     def recall(
         self,
@@ -72,20 +70,32 @@ class LongTermMemory:
     ) -> List[Dict]:
         """
         Recall relevant memories for a user query.
-        """
-        embedding = self.embedder.embed(query)
 
-        return self.vectordb.search(
-            embedding=embedding,
-            top_k=top_k,
-            filters={"user_id": user_id},
+        Returns the same shape cortex-core did — [{"text", "metadata", "score"}] —
+        so the prompt builder and the agent tool don't care which store is behind it.
+        Score is the store's distance (lower = more similar).
+        """
+        results = self.vectorstore.similarity_search_with_score(
+            query,
+            k=top_k,
+            filter={"user_id": user_id},
         )
+        return [
+            {"text": doc.page_content, "metadata": doc.metadata, "score": score}
+            for doc, score in results
+        ]
 
     def forget_user(self, user_id: str) -> None:
         """
         Delete all memories for a user.
+
+        LangChain's generic VectorStore.delete() only takes ids, so this looks
+        the user's ids up first via Chroma's metadata filter (`get(where=...)`).
         """
-        self.vectordb.delete(filters={"user_id": user_id})
+        existing = self.vectorstore.get(where={"user_id": user_id})
+        ids = existing.get("ids", [])
+        if ids:
+            self.vectorstore.delete(ids=ids)
 
     def remember_conversation(
         self,
@@ -95,25 +105,24 @@ class LongTermMemory:
     ) -> None:
         """
         Store a single conversation turn (user + assistant exchange) as one atomic unit.
-
         Skips chunking intentionally — conversation pairs are already small,
         and splitting them would break their semantic coherence.
         """
         text = f"user: {user_message}\nassistant: {assistant_response}"
-        embedding = self.embedder.embed(text)
-
-        self.vectordb.add(
-            ids=[self._build_id(user_id)],
-            embeddings=[embedding],
-            documents=[text],
-            metadatas=[{
-                "user_id": user_id,
-                "type": "conversation",
-                "importance": 1,
-                "created_at": datetime.utcnow().isoformat(),
-            }],
-        )
+        doc = Document(page_content=text, metadata=self._metadata(user_id, "conversation", 1))
+        self.vectorstore.add_documents([doc], ids=[self._build_id(user_id)])
 
     @staticmethod
-    def _build_id(user_id: str) -> str:
-        return f"{user_id}-{datetime.utcnow().timestamp()}"
+    def _metadata(user_id: str, memory_type: str, importance: int) -> Dict:
+        return {
+            "user_id": user_id,
+            "type": memory_type,
+            "importance": importance,
+            "created_at": datetime.utcnow().isoformat(),
+        }
+
+    @staticmethod
+    def _build_id(user_id: str, index: int = 0) -> str:
+        # The chunk index keeps ids unique when remember() stores several
+        # chunks within the same timestamp tick.
+        return f"{user_id}-{datetime.utcnow().timestamp()}-{index}"

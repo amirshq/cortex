@@ -1,0 +1,59 @@
+{
+  "label": "book-1812",
+  "created": "2026-10-07 08:34",
+  "vectors": 1812,
+  "real_vectors": 1812,
+  "dims": 3072,
+  "top_k": 10,
+  "embedding_model": "text-embedding-3-large",
+  "rows": [
+    {
+      "db": "chroma",
+      "build_s": 0.59,
+      "disk_mb": 46.2,
+      "p50_ms": 1.06,
+      "p95_ms": 1.26,
+      "overlap@k": 0.997,
+      "recall@1": 0.75,
+      "recall@5": 0.875,
+      "recall@10": 0.875,
+      "mrr": 0.793
+    },
+    {
+      "db": "faiss-flat",
+      "build_s": 0.07,
+      "disk_mb": 22.3,
+      "p50_ms": 0.47,
+      "p95_ms": 0.59,
+      "overlap@k": 1.0,
+      "recall@1": 0.75,
+      "recall@5": 0.875,
+      "recall@10": 0.875,
+      "mrr": 0.793
+    },
+    {
+      "db": "faiss-hnsw",
+      "build_s": 0.31,
+      "disk_mb": 22.8,
+      "p50_ms": 0.08,
+      "p95_ms": 0.11,
+      "overlap@k": 0.97,
+      "recall@1": 0.75,
+      "recall@5": 0.875,
+      "recall@10": 0.875,
+      "mrr": 0.793
+    },
+    {
+      "db": "qdrant-local",
+      "build_s": 2.99,
+      "disk_mb": 52.0,
+      "p50_ms": 13.09,
+      "p95_ms": 15.75,
+      "overlap@k": 1.0,
+      "recall@1": 0.75,
+      "recall@5": 0.875,
+      "recall@10": 0.875,
+      "mrr": 0.793
+    }
+  ]
+}

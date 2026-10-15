@@ -178,6 +178,8 @@ Temporary Items
 **/data/rag_uploads/
 **/data/rag_vectorstore/
 **/data/library/
+# Experiment indexes and the Docling cache (tests/evals/build_experiment_index.py)
+**/data/experiments/
 
 # Windows
 Thumbs.db
@@ -249,3 +251,21 @@ dist/
 # Any env variant (e.g. .env2) holds real credentials. Keep a template tracked.
 .env*
 !.env.example
+
+# Private data: chat memory, chat history, caches
+# Long-term chat memory (users' conversations) and SQLite chat sessions
+**/data/vectordb/
+**/data/chatbot.db
+**/data/artifacts/
+**/chroma_db/
+**/embedding_cache/
+**/.embedding_cache/
+**/.cache/
+
+# Credentials
+*.pem
+*.key
+*.p12
+credentials*.json
+secrets*.json
+service-account*.json

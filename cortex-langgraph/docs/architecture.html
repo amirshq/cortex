@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cortex LangGraph Architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&family=Noto+Serif:ital@0;1&family=Noto+Sans+KR:wght@400;500;600&family=Noto+Serif+KR:wght@400&family=Noto+Sans+TC:wght@400;500;600&family=Noto+Serif+TC:wght@400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f5f5f5;   /* white-smoke */
+      --color-ink:     #2d3142;   /* jet-black */
+      --color-muted:   #4f5d75;   /* blue-slate */
+      --color-accent:  #eb6c36;   /* atomic-tangerine */
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', 'Noto Serif', 'Noto Serif KR', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+
+    .frame { max-width: 1320px; width: 100%; }
+    /* The SVG holds its readable width (min-width == the viewBox width, so the
+       type ramp is never silently scaled down). This wrapper lets a narrow
+       screen scroll the diagram instead of the whole page. */
+    .diagram-container { width: 100%; overflow-x: auto; }
+
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+
+    svg { width: 100%; min-width: 1280px; display: block; }
+    /* Paper has no scrollbar, so the local scroller would clip instead of
+       scroll. Let the diagram scale down to the sheet: smaller but whole
+       beats sharp but cut off. Must come after the svg rule above - a media
+       query adds no specificity, so a later plain rule would win. */
+    @media print {
+      .diagram-container { overflow-x: visible; }
+      svg { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Architecture · cortex-langgraph</p>
+    <h1>Cortex, the LangChain + LangGraph build</h1>
+
+    <!-- Replace cortex-architecture with a unique slug for this diagram before export. -->
+    <div class="diagram-container">
+      <svg viewBox="0 40 1280 896" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="cortex-architecture-title cortex-architecture-desc">
+        <title id="cortex-architecture-title">Cortex LangGraph architecture</title>
+        <desc id="cortex-architecture-desc">A React UI calls a FastAPI app that routes chat to a LangGraph tool-calling agent and PDF questions to a LangGraph retrieve, rerank and generate graph, backed by Redis, SQLite, two Chroma stores, OpenAI and a Prometheus monitoring stack.</desc>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/></marker>
+          <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker>
+
+          <!-- OPTIONAL: dot-pattern background. Uncomment the <pattern> and the second <rect> below if you want the dotted paper look. -->
+          <!--
+          <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"/>
+          </pattern>
+          -->
+        </defs>
+
+        <rect width="100%" height="100%" fill="#f5f5f5"/>
+        <!-- <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"/> -->
+
+        <rect x="400" y="80" width="432" height="212" rx="8" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+        <rect x="412" y="84" width="224" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="524" y="93" fill="rgba(45,49,66,0.45)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">CHAT AGENT · LANGGRAPH · RECURSION_LIMIT 22</text>
+        <rect x="400" y="444" width="680" height="216" rx="8" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+        <rect x="572" y="448" width="208" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="676" y="457" fill="rgba(45,49,66,0.45)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">RAG · LANGGRAPH · FALLBACK_POLICY HYBRID</text>
+        <rect x="24" y="700" width="752" height="148" rx="8" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+        <rect x="36" y="704" width="160" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="116" y="713" fill="rgba(45,49,66,0.45)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">OBSERVABILITY · DOCKER COMPOSE</text>
+        <!-- connectors (drawn before nodes) -->
+        <path d="M 144,382 L 192,382" fill="none" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <path d="M 320,142 L 416,142" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 320,382 L 416,382" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 320,506 L 416,506" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 320,614 L 416,614" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 576,142 L 640,142" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 680,172 L 680,216" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 728,216 L 728,172" fill="none" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+        <path d="M 768,142 L 1080,142" fill="none" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <path d="M 816,246 L 896,246" fill="none" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <path d="M 800,276 L 800,352" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 456,172 L 456,352" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 496,172 L 496,316 Q 496,324 504,324 L 624,324 Q 632,324 632,332 L 632,352" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 536,172 L 536,292 Q 536,300 544,300 L 768,300 Q 776,300 776,308 L 776,352" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 912,382 L 1112,382 Q 1120,382 1120,374 L 1120,192" fill="none" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <path d="M 456,476 L 456,412" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 552,506 L 592,506" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 704,506 L 760,506" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 904,506 L 968,506" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 664,536 L 664,584" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 560,614 L 616,614" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 808,536 L 808,584" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 856,536 L 856,552 Q 856,560 864,560 L 984,560 Q 992,560 992,568 L 992,584" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 1040,584 L 1040,536" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 1064,506 L 1148,506 Q 1156,506 1156,498 L 1156,192" fill="none" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <path d="M 680,644 L 680,668 Q 680,676 688,676 L 1184,676 Q 1192,676 1192,668 L 1192,192" fill="none" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <path d="M 256,732 L 256,644" fill="none" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+        <path d="M 144,762 L 192,762" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 320,762 L 384,762" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 288,792 L 288,808 Q 288,816 296,816 L 660,816 Q 668,816 668,808 L 668,792" fill="none" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+        <!-- connector labels -->
+        <rect x="150" y="362" width="36" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="168" y="371" fill="#2e5aa8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">HTTP</text>
+        <rect x="348" y="122" width="40" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="368" y="131" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">/CHAT</text>
+        <rect x="340" y="362" width="56" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="368" y="371" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">/HISTORY</text>
+        <rect x="334" y="486" width="68" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="368" y="495" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">/RAG/QUERY</text>
+        <rect x="332" y="594" width="72" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="368" y="603" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">/RAG/UPLOAD</text>
+        <rect x="586" y="122" width="44" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="608" y="131" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">INVOKE</text>
+        <rect x="604" y="188" width="68" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="638" y="197" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">TOOL CALLS</text>
+        <rect x="736" y="188" width="52" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="762" y="197" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">RESULTS</text>
+        <rect x="902" y="122" width="44" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="924" y="131" fill="#2e5aa8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">GPT-4O</text>
+        <rect x="822" y="226" width="68" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="856" y="235" fill="#2e5aa8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">WEB_SEARCH</text>
+        <rect x="808" y="308" width="84" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="850" y="317" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">VECTOR SEARCH</text>
+        <rect x="392" y="256" width="56" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="420" y="265" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">MESSAGES</text>
+        <rect x="544" y="332" width="40" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="564" y="341" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">TURNS</text>
+        <rect x="684" y="320" width="84" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="726" y="329" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">RECALL / SAVE</text>
+        <rect x="996" y="362" width="40" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="1016" y="371" fill="#2e5aa8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">EMBED</text>
+        <rect x="464" y="438" width="56" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="492" y="447" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">SAVE Q&amp;A</text>
+        <rect x="914" y="486" width="44" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="936" y="495" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">PASSED</text>
+        <rect x="612" y="554" width="44" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="634" y="563" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">SEARCH</text>
+        <rect x="566" y="594" width="44" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="588" y="603" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">UPSERT</text>
+        <rect x="728" y="554" width="72" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="764" y="563" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">FAIL_CLOSED</text>
+        <rect x="892" y="540" width="64" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="924" y="549" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">ALL GATED</text>
+        <rect x="1048" y="554" width="56" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="1076" y="563" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">LOW CONF</text>
+        <rect x="1074" y="486" width="72" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="1110" y="495" fill="#2e5aa8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">GPT-4O-MINI</text>
+        <rect x="916" y="656" width="40" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="936" y="665" fill="#2e5aa8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">EMBED</text>
+        <rect x="264" y="682" width="80" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="304" y="691" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">GET /METRICS</text>
+        <rect x="146" y="742" width="44" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="168" y="751" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">PROMQL</text>
+        <rect x="330" y="742" width="44" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="352" y="751" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">ALERTS</text>
+        <rect x="456" y="824" width="44" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="478" y="833" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">SCRAPE</text>
+        <!-- nodes -->
+        <g id="n-ui">
+        <rect x="40" y="352" width="104" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="40" y="352" width="104" height="60" rx="6" fill="rgba(79,93,117,0.10)" stroke="#7a8399" stroke-width="1"/>
+        <rect x="48" y="360" width="24" height="12" rx="2" fill="transparent" stroke="rgba(122,131,153,0.40)" stroke-width="0.8"/>
+        <text x="60" y="369" fill="#7a8399" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">WEB</text>
+        <text x="92" y="388" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">React UI</text>
+        <text x="92" y="403" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Vite · :3000</text>
+        </g>
+        <g id="n-api">
+        <rect x="192" y="112" width="128" height="532" rx="6" fill="#f5f5f5"/>
+        <rect x="192" y="112" width="128" height="532" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="200" y="120" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+        <text x="212" y="129" fill="#2d3142" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">API</text>
+        <text x="256" y="150" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">FastAPI</text>
+        <text x="256" y="165" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">:8000 · /api/v1</text>
+        </g>
+        <g id="n-orch">
+        <rect x="416" y="112" width="160" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="416" y="112" width="160" height="60" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="424" y="120" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+        <text x="436" y="129" fill="#2d3142" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">SVC</text>
+        <text x="496" y="148" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">AgenticChatbot</text>
+        <text x="496" y="163" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">load ctx · persist ×3</text>
+        </g>
+        <g id="n-agent">
+        <rect x="640" y="112" width="128" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="640" y="112" width="128" height="60" rx="6" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1"/>
+        <rect x="648" y="120" width="32" height="12" rx="2" fill="transparent" stroke="rgba(235,108,54,0.50)" stroke-width="0.8"/>
+        <text x="664" y="129" fill="#eb6c36" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">NODE</text>
+        <text x="704" y="148" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">agent</text>
+        <text x="704" y="163" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">llm.bind_tools()</text>
+        </g>
+        <g id="n-tools">
+        <rect x="640" y="216" width="176" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="640" y="216" width="176" height="60" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="648" y="224" width="32" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+        <text x="664" y="233" fill="#2d3142" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">NODE</text>
+        <text x="728" y="252" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">ToolNode</text>
+        <text x="728" y="267" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">search_vector_db · web_search</text>
+        </g>
+        <g id="n-web">
+        <rect x="896" y="216" width="152" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="896" y="216" width="152" height="60" rx="6" fill="rgba(45,49,66,0.03)" stroke="rgba(45,49,66,0.30)" stroke-width="1"/>
+        <rect x="904" y="224" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.22)" stroke-width="0.8"/>
+        <text x="916" y="233" fill="#7a8399" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">EXT</text>
+        <text x="972" y="252" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Web search</text>
+        <text x="972" y="267" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">ddg · newsapi · mock</text>
+        </g>
+        <g id="n-openai">
+        <rect x="1080" y="112" width="160" height="80" rx="6" fill="#f5f5f5"/>
+        <rect x="1080" y="112" width="160" height="80" rx="6" fill="rgba(45,49,66,0.03)" stroke="rgba(45,49,66,0.30)" stroke-width="1"/>
+        <rect x="1088" y="120" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.22)" stroke-width="0.8"/>
+        <text x="1100" y="129" fill="#7a8399" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">EXT</text>
+        <text x="1160" y="152" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">OpenAI API</text>
+        <text x="1160" y="167" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">gpt-4o · gpt-4o-mini</text>
+        <text x="1160" y="180" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">text-embedding-3-small</text>
+        </g>
+        <g id="n-sqlite">
+        <rect x="416" y="352" width="152" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="416" y="352" width="152" height="60" rx="6" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="1"/>
+        <rect x="424" y="360" width="20" height="12" rx="2" fill="transparent" stroke="rgba(79,93,117,0.50)" stroke-width="0.8"/>
+        <text x="434" y="369" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">DB</text>
+        <text x="492" y="388" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">SQLite</text>
+        <text x="492" y="403" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">sessions · messages · rag</text>
+        </g>
+        <g id="n-redis">
+        <rect x="592" y="352" width="128" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="592" y="352" width="128" height="60" rx="6" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="1"/>
+        <rect x="600" y="360" width="20" height="12" rx="2" fill="transparent" stroke="rgba(79,93,117,0.50)" stroke-width="0.8"/>
+        <text x="610" y="369" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">KV</text>
+        <text x="656" y="388" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Redis</text>
+        <text x="656" y="403" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">turns · 1h TTL</text>
+        </g>
+        <g id="n-chromachat">
+        <rect x="752" y="352" width="160" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="752" y="352" width="160" height="60" rx="6" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="1"/>
+        <rect x="760" y="360" width="24" height="12" rx="2" fill="transparent" stroke="rgba(79,93,117,0.50)" stroke-width="0.8"/>
+        <text x="772" y="369" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">VEC</text>
+        <text x="832" y="388" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Chroma · memory</text>
+        <text x="832" y="403" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">chat_history</text>
+        </g>
+        <g id="n-query">
+        <rect x="416" y="476" width="136" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="416" y="476" width="136" height="60" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="424" y="484" width="20" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+        <text x="434" y="493" fill="#2d3142" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">FN</text>
+        <text x="484" y="512" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">query_rag()</text>
+        <text x="484" y="527" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">metrics · Q&A log</text>
+        </g>
+        <g id="n-retrieve">
+        <rect x="592" y="476" width="112" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="592" y="476" width="112" height="60" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="600" y="484" width="32" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+        <text x="616" y="493" fill="#2d3142" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">NODE</text>
+        <text x="648" y="512" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">retrieve</text>
+        <text x="648" y="527" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">dense top_k 30</text>
+        </g>
+        <g id="n-rerank">
+        <rect x="760" y="476" width="144" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="760" y="476" width="144" height="60" rx="6" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1"/>
+        <rect x="768" y="484" width="32" height="12" rx="2" fill="transparent" stroke="rgba(235,108,54,0.50)" stroke-width="0.8"/>
+        <text x="784" y="493" fill="#eb6c36" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">NODE</text>
+        <text x="832" y="512" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">rerank + gate</text>
+        <text x="832" y="527" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">bge-reranker ≥0.15</text>
+        </g>
+        <g id="n-generate">
+        <rect x="968" y="476" width="96" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="968" y="476" width="96" height="60" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="976" y="484" width="32" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+        <text x="992" y="493" fill="#2d3142" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">NODE</text>
+        <text x="1016" y="512" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">generate</text>
+        <text x="1016" y="527" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">LCEL chain</text>
+        </g>
+        <g id="n-ingest">
+        <rect x="416" y="584" width="144" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="416" y="584" width="144" height="60" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="424" y="592" width="20" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+        <text x="434" y="601" fill="#2d3142" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">FN</text>
+        <text x="488" y="620" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">build_index</text>
+        <text x="488" y="635" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Docling → splitter</text>
+        </g>
+        <g id="n-chromarag">
+        <rect x="616" y="584" width="128" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="616" y="584" width="128" height="60" rx="6" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="1"/>
+        <rect x="624" y="592" width="24" height="12" rx="2" fill="transparent" stroke="rgba(79,93,117,0.50)" stroke-width="0.8"/>
+        <text x="636" y="601" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">VEC</text>
+        <text x="680" y="620" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Chroma · RAG</text>
+        <text x="680" y="635" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">rag_vectorstore</text>
+        </g>
+        <g id="n-refuse">
+        <rect x="792" y="584" width="112" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="792" y="584" width="112" height="60" rx="6" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.20)" stroke-width="1" stroke-dasharray="4,3"/>
+        <rect x="800" y="592" width="32" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.22)" stroke-width="0.8"/>
+        <text x="816" y="601" fill="#7a8399" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">NODE</text>
+        <text x="848" y="620" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">refuse</text>
+        <text x="848" y="635" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">no LLM call</text>
+        </g>
+        <g id="n-fallback">
+        <rect x="968" y="584" width="96" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="968" y="584" width="96" height="60" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="976" y="592" width="32" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+        <text x="992" y="601" fill="#2d3142" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">NODE</text>
+        <text x="1016" y="620" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">fallback</text>
+        <text x="1016" y="635" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">vector top_n</text>
+        </g>
+        <g id="n-grafana">
+        <rect x="40" y="732" width="104" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="40" y="732" width="104" height="60" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="48" y="740" width="20" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+        <text x="58" y="749" fill="#2d3142" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">UI</text>
+        <text x="92" y="768" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Grafana</text>
+        <text x="92" y="783" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">:3001</text>
+        </g>
+        <g id="n-prom">
+        <rect x="192" y="732" width="128" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="192" y="732" width="128" height="60" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="200" y="740" width="32" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+        <text x="216" y="749" fill="#2d3142" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">TSDB</text>
+        <text x="256" y="768" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Prometheus</text>
+        <text x="256" y="783" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">:9090</text>
+        </g>
+        <g id="n-alert">
+        <rect x="384" y="732" width="144" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="384" y="732" width="144" height="60" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="392" y="740" width="32" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+        <text x="408" y="749" fill="#2d3142" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">ALRT</text>
+        <text x="456" y="768" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Alertmanager</text>
+        <text x="456" y="783" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">placeholder rcvr</text>
+        </g>
+        <g id="n-exporters">
+        <rect x="576" y="732" width="184" height="60" rx="6" fill="#f5f5f5"/>
+        <rect x="576" y="732" width="184" height="60" rx="6" fill="rgba(45,49,66,0.03)" stroke="rgba(45,49,66,0.30)" stroke-width="1"/>
+        <rect x="584" y="740" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.22)" stroke-width="0.8"/>
+        <text x="596" y="749" fill="#7a8399" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">EXP</text>
+        <text x="668" y="768" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Exporters</text>
+        <text x="668" y="783" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">redis_exporter · cAdvisor</text>
+        </g>
+        <line x1="204" y1="176" x2="308" y2="176" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+        <text x="256" y="192" fill="#2d3142" font-size="9" font-weight="500" font-family="'Geist Mono', monospace" text-anchor="middle">router.py</text>
+        <text x="256" y="206" fill="#7a8399" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">TokenBucket 10 · 2/s</text>
+        <text x="256" y="219" fill="#7a8399" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Pydantic DTOs</text>
+        <line x1="204" y1="248" x2="308" y2="248" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+        <text x="256" y="264" fill="#2d3142" font-size="9" font-weight="500" font-family="'Geist Mono', monospace" text-anchor="middle">controller.py</text>
+        <text x="256" y="278" fill="#7a8399" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">cost per model</text>
+        <text x="256" y="291" fill="#7a8399" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">metric counters</text>
+        <line x1="204" y1="320" x2="308" y2="320" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+        <text x="256" y="336" fill="#2d3142" font-size="9" font-weight="500" font-family="'Geist Mono', monospace" text-anchor="middle">middleware</text>
+        <text x="256" y="350" fill="#7a8399" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">CORS · Prometheus</text>
+        <line x1="204" y1="420" x2="308" y2="420" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+        <text x="256" y="436" fill="#2d3142" font-size="9" font-weight="500" font-family="'Geist Mono', monospace" text-anchor="middle">rag upload</text>
+        <text x="256" y="450" fill="#7a8399" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">replaces prior PDF</text>
+        <text x="256" y="463" fill="#7a8399" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">→ data/rag_uploads</text>
+        <line x1="204" y1="596" x2="308" y2="596" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+        <text x="256" y="616" fill="#2d3142" font-size="9" font-weight="500" font-family="'Geist Mono', monospace" text-anchor="middle">main.py</text>
+        <text x="256" y="630" fill="#7a8399" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">GET /metrics</text>
+        <line x1="40" y1="872" x2="1240" y2="872" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+        <text x="40" y="888" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+        <rect x="40" y="900" width="14" height="10" rx="2" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1"/>
+        <text x="60" y="908" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Focal LangGraph node</text>
+        <rect x="196" y="900" width="14" height="10" rx="2" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="216" y="908" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Service / graph node</text>
+        <rect x="352" y="900" width="14" height="10" rx="2" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="1"/>
+        <text x="372" y="908" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Store</text>
+        <rect x="430" y="900" width="14" height="10" rx="2" fill="rgba(45,49,66,0.03)" stroke="rgba(45,49,66,0.30)" stroke-width="1"/>
+        <text x="450" y="908" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">External / exporter</text>
+        <rect x="580" y="900" width="14" height="10" rx="2" fill="rgba(79,93,117,0.10)" stroke="#7a8399" stroke-width="1"/>
+        <text x="600" y="908" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Client</text>
+        <rect x="663" y="900" width="14" height="10" rx="2" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.20)" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="683" y="908" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Terminal branch</text>
+        <line x1="793" y1="905" x2="821" y2="905" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <text x="829" y="908" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">In-process call</text>
+        <line x1="935" y1="905" x2="963" y2="905" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <text x="971" y="908" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">HTTP / external API</text>
+        <line x1="1097" y1="905" x2="1125" y2="905" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+        <text x="1133" y="908" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Return · pull / scrape</text>
+
+      </svg>
+    </div>
+  </div>
+</body>
+</html>

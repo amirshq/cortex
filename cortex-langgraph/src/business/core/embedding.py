@@ -1,73 +1,30 @@
-"""Embedding interfaces and OpenAI implementation."""
+"""Embedding factory — LangChain edition.
+
+cortex-core defined its own `Embedder` ABC and an `OpenAIEmbedder` with a
+hand-rolled exponential-backoff retry loop. LangChain's `Embeddings` interface
+has the same two methods (`embed_documents`, `embed_query`), and
+`OpenAIEmbeddings` / `AzureOpenAIEmbeddings` implement it with retries built in.
+
+Because every LangChain vector store takes an `Embeddings` object directly,
+the vector stores now embed text themselves — callers hand them strings /
+Documents instead of pre-computed vectors.
+
+New compared to cortex-core: an optional on-disk embedding cache
+(`CacheBackedEmbeddings`). Re-indexing the same PDF re-embeds identical chunks;
+with the cache those come from disk instead of a paid API call.
+"""
 
 from __future__ import annotations
 
 import os
-import time
-from abc import ABC, abstractmethod
-from typing import List, Optional
+import re
+from typing import Optional
 
-from openai import OpenAI
-from openai import InternalServerError
+from langchain_core.embeddings import Embeddings
 
+from src.utils.config import model_settings
 
-class Embedder(ABC):
-    @abstractmethod
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        ...
-
-    @abstractmethod
-    def embed_query(self, text: str) -> List[float]:
-        ...
-    
-    def embed(self, text: str) -> List[float]:
-        """
-        Alias for embed_query() for backward compatibility with LongTermMemory.
-        """
-        return self.embed_query(text)
-
-
-class OpenAIEmbedder(Embedder):
-    """
-    Thin wrapper over OpenAI embeddings.
-    Uses text-embedding-3-small by default (fast, 1536 dims).
-    """
-
-    def __init__(
-        self,
-        api_key: Optional[str] = None,
-        model: str = "text-embedding-3-small",
-        client: Optional[OpenAI] = None,
-    ):
-        # `client` lets callers (e.g. the Azure branch of create_embedder())
-        # inject a pre-built AzureOpenAI client — it's duck-type compatible
-        # since only .embeddings.create() is ever called on it.
-        self.client = client or OpenAI(api_key=api_key)
-        self.model = model
-
-    def _embed(self, inputs: List[str], max_retries: int = 5) -> List[List[float]]:
-        last_err = None
-        for attempt in range(max_retries):
-            try:
-                res = self.client.embeddings.create(model=self.model, input=inputs)
-                return [item.embedding for item in res.data]
-            except InternalServerError as e:
-                last_err = e
-                if attempt < max_retries - 1:
-                    delay = 2 ** attempt
-                    time.sleep(delay)
-                    print(f"⚠️  OpenAI 500 error, retrying in {delay}s (attempt {attempt + 2}/{max_retries})...", flush=True)
-                else:
-                    raise last_err from None
-        raise last_err from None
-
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        if not texts:
-            return []
-        return self._embed(texts)
-
-    def embed_query(self, text: str) -> List[float]:
-        return self._embed([text])[0]
+from .model import azure_openai_settings
 
 
 # ── Provider selection ────────────────────────────────────────────────────
@@ -75,28 +32,43 @@ class OpenAIEmbedder(Embedder):
 # EMBEDDING_PROVIDER (env var) picks the embedding implementation. Defaults
 # to today's behavior — on-prem/local deployments don't need to set anything.
 #
-#   openai        (default) — OpenAI's cloud embeddings API.
-#   azure_openai  — Azure OpenAI Service embeddings. Requires
-#                   AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY,
-#                   AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME (see .env).
+#   openai        (default) — OpenAIEmbeddings; model from config.yml →
+#                   models.embedding.name.
+#   azure_openai  — AzureOpenAIEmbeddings. Requires AZURE_OPENAI_ENDPOINT,
+#                   AZURE_OPENAI_API_KEY, AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME.
 
 def create_embedder(
     provider: Optional[str] = None,
     *,
     api_key: Optional[str] = None,
     model: Optional[str] = None,
-) -> Embedder:
-    """Factory for the embedding model, selected by EMBEDDING_PROVIDER or `provider`."""
+    role: str = "embedding",
+    cache_dir: Optional[str] = None,
+) -> Embeddings:
+    """Factory for the embedding model, selected by EMBEDDING_PROVIDER or `provider`.
+
+    role: which entry of config.yml's `models:` names the model —
+          "embedding" (chat memory, the default) or "rag_embedding" (the RAG index).
+          They are separate because each index must be queried with the model it
+          was built with, and the two indexes are rebuilt at different times.
+
+    cache_dir: when given, wraps the model in a CacheBackedEmbeddings backed by
+    a local file store in that directory. Off by default so tests and one-off
+    scripts never write cache files unless asked to.
+    """
     provider = (provider or os.getenv("EMBEDDING_PROVIDER", "openai")).strip().lower()
 
     if provider == "openai":
+        from langchain_openai import OpenAIEmbeddings
+
         resolved_key = api_key or os.getenv("OPENAI_API_KEY")
         if not resolved_key:
             raise RuntimeError("OPENAI_API_KEY must be set for EMBEDDING_PROVIDER=openai")
-        return OpenAIEmbedder(api_key=resolved_key, model=model or "text-embedding-3-small")
+        model_name = model or model_settings(role)["name"]
+        embedder: Embeddings = OpenAIEmbeddings(model=model_name, api_key=resolved_key, max_retries=5)
 
-    if provider == "azure_openai":
-        from .model import build_azure_openai_client
+    elif provider == "azure_openai":
+        from langchain_openai import AzureOpenAIEmbeddings
 
         deployment = model or os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME")
         if not deployment:
@@ -105,8 +77,50 @@ def create_embedder(
                 "AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME (the deployment name you "
                 "gave the embedding model in Azure — not the underlying model name)."
             )
-        return OpenAIEmbedder(client=build_azure_openai_client(api_key), model=deployment)
+        endpoint, resolved_key, api_version = azure_openai_settings(api_key)
+        model_name = deployment
+        embedder = AzureOpenAIEmbeddings(
+            azure_endpoint=endpoint,
+            api_key=resolved_key,
+            api_version=api_version,
+            azure_deployment=deployment,
+            max_retries=5,
+        )
 
-    raise ValueError(
-        f"Unknown EMBEDDING_PROVIDER={provider!r}. Supported: openai, azure_openai."
+    else:
+        raise ValueError(
+            f"Unknown EMBEDDING_PROVIDER={provider!r}. Supported: openai, azure_openai."
+        )
+
+    if cache_dir:
+        return with_embedding_cache(embedder, cache_dir=cache_dir, namespace=f"{provider}:{model_name}")
+    return embedder
+
+
+def with_embedding_cache(embedder: Embeddings, *, cache_dir: str, namespace: str) -> Embeddings:
+    """Wrap an embedder so repeated texts are served from a local file cache.
+
+    The namespace includes provider + model: vectors from different models are
+    not interchangeable, so they must never share cache entries.
+    query_embedding_cache=True caches query embeddings too (same store), so a
+    repeated question skips the embedding call as well.
+    """
+    from langchain_classic.embeddings import CacheBackedEmbeddings
+    from langchain_classic.storage import LocalFileStore
+
+    # The namespace becomes part of every cache key, and LocalFileStore only
+    # accepts [A-Za-z0-9_.-/] in keys — "openai:text-embedding-3-small" would
+    # be rejected on the first write. Replace anything else (and "/", which
+    # would create subdirectories) with "_".
+    safe_namespace = re.sub(r"[^A-Za-z0-9_.\-]", "_", namespace)
+
+    store = LocalFileStore(cache_dir)
+    return CacheBackedEmbeddings.from_bytes_store(
+        embedder,
+        store,
+        namespace=safe_namespace,
+        query_embedding_cache=True,
+        # Keys are a hash of the text. The default (SHA-1) isn't
+        # collision-resistant and LangChain warns about it; SHA-256 is.
+        key_encoder="sha256",
     )

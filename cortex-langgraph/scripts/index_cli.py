@@ -25,8 +25,8 @@ Full example:
 python scripts/index_cli.py \
   --data-dir src/business/rag/data \
   --max-context-chars 12000 \
-  --chunk-size 800 \
-  --overlap 100 \
+  --chunk-size 800 \        # optional — defaults to config.yml → rag.chunking
+  --overlap 100 \           # optional — defaults to config.yml → rag.chunking
   --include-table-images true
 
 This ingests your PDFs, chunks them, embeds them, and saves the index to the specified persist_dir.
@@ -61,9 +61,9 @@ def rebuild(
     ),
     max_context_chars: int = typer.Option(12_000, help="Max combined text per document"),
     include_table_images: bool = typer.Option(True, help="Extract table structure via Docling (runs locally, no API key needed)"),
-    pdf_strategy: str = typer.Option("hi_res", help="PDF strategy: 'hi_res' (OCR, slower) | 'fast' (no OCR, faster)"),
-    chunk_size: int = typer.Option(800, help="Chunk size (characters)"),
-    overlap: int = typer.Option(100, help="Chunk overlap (characters)"),
+    pdf_strategy: str = typer.Option("auto", help="PDF strategy: 'auto' (OCR only scanned PDFs) | 'hi_res' (always OCR) | 'fast' (never OCR)"),
+    chunk_size: Optional[int] = typer.Option(None, help="Chunk size (characters). Default: config.yml → rag.chunking.chunk_size"),
+    overlap: Optional[int] = typer.Option(None, help="Chunk overlap (characters). Default: config.yml → rag.chunking.chunk_overlap"),
 ):
     resolved_persist_dir = persist_dir or rag_persist_dir()
     docs, chunks = build_index(

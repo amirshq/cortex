@@ -171,6 +171,10 @@ ChatRequest = Union[StructuredQueryRequest, FreeFormQueryRequest, ChatMessageReq
 class RAGQueryRequest(BaseModel):
     """Request DTO for RAG pipeline queries."""
     question: str = Field(..., description="Natural-language question to answer from uploaded PDFs")
+    user_id: Optional[int] = Field(
+        None, gt=0,
+        description="When given, the question and answer are saved to this user's RAG history",
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -204,3 +208,35 @@ class RAGUploadResponse(BaseModel):
 
 
 
+
+
+class RAGDocument(BaseModel):
+    """One PDF currently in the RAG index."""
+    source_id: str
+    pages: Optional[int] = None
+    chunks: int = 0
+    indexed_at: Optional[str] = None
+
+
+class RAGDocumentsResponse(BaseModel):
+    """Response DTO for GET /rag/documents."""
+    documents: List[RAGDocument] = Field(default_factory=list)
+
+
+class RAGHistoryItem(BaseModel):
+    """One saved PDF question and its answer."""
+    id: int
+    question: str
+    answer: str
+    sources: List[dict] = Field(default_factory=list)
+    created_at: str
+
+
+class RAGHistoryResponse(BaseModel):
+    """Response DTO for GET /rag/history."""
+    items: List[RAGHistoryItem] = Field(default_factory=list)
+
+
+class RAGHistoryClearResponse(BaseModel):
+    """Response DTO for DELETE /rag/history."""
+    deleted: int

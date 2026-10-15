@@ -1,9 +1,22 @@
-"""Live data providers for real-time information (news, weather, web search, etc.)."""
+"""Live data providers for real-time information.
+
+Every provider answers two kinds of question, behind two agent tools:
+
+  search(query)       — the general web: explanations, docs, facts
+                        ("what is LangGraph?")        → the web_search tool
+  news(query, days)   — recent news within a time window
+                        ("AI hot topics this week")    → the news_search tool
+
+They are different jobs. A news API can't explain what LangGraph is (it only
+finds articles that mention it), and a general web search is poor at "only the
+last 7 days". So each provider does what it is good at, and delegates the rest.
+"""
 
 from __future__ import annotations
 
 import os
 from abc import ABC, abstractmethod
+from datetime import date, timedelta
 from typing import Optional, List, Dict, Any
 import json
 
@@ -13,7 +26,10 @@ except ImportError:
     requests = None
 
 try:
-    from duckduckgo_search import DDGS
+    # `ddgs` is the maintained successor of the `duckduckgo-search` package,
+    # whose old DuckDuckGo endpoints stopped working. Its default "auto"
+    # backend falls back across search engines when one blocks the request.
+    from ddgs import DDGS
 except ImportError:
     DDGS = None
 
@@ -39,20 +55,24 @@ class LiveDataProvider(ABC):
         """
         pass
 
+    def news(self, query: str, days: int = 7, limit: int = 10) -> List[Dict[str, Any]]:
+        """Recent news about `query` from the last `days` days.
+
+        Default: fall back to a general search. Providers with a real news
+        source override this. Results may also carry "date" (YYYY-MM-DD).
+        """
+        return self.search(query, limit=limit)
+
 
 class DuckDuckGoSearchProvider(LiveDataProvider):
     """
-    Web search using DuckDuckGo via duckduckgo-search library (free, no API key required).
-    
-    This uses the community-maintained duckduckgo-search package which is more reliable
-    than the public API.
+    Web and news search via the `ddgs` library (free, no API key required).
     """
 
     def __init__(self):
         if DDGS is None:
             raise RuntimeError(
-                "duckduckgo-search library is required. "
-                "Install with: pip install duckduckgo-search"
+                "The ddgs library is required. Install with: pip install ddgs"
             )
 
     def search(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
@@ -92,6 +112,29 @@ class DuckDuckGoSearchProvider(LiveDataProvider):
                 "url": ""
             }]
 
+    def news(self, query: str, days: int = 7, limit: int = 10) -> List[Dict[str, Any]]:
+        """Recent news. ddgs only offers coarse windows: day / week / month / year."""
+        timelimit = "d" if days <= 1 else "w" if days <= 7 else "m" if days <= 31 else "y"
+        try:
+            raw = DDGS(timeout=10).news(query, timelimit=timelimit, max_results=limit)
+            return [
+                {
+                    "title": r.get("title", ""),
+                    "summary": r.get("body", ""),
+                    "url": r.get("url", ""),
+                    "source": r.get("source", "") or "DuckDuckGo News",
+                    "date": (r.get("date") or "")[:10],
+                }
+                for r in raw
+            ][:limit]
+        except Exception as e:
+            return [{
+                "title": "News search error",
+                "summary": f"Failed to fetch news for '{query}': {str(e)}",
+                "source": "DuckDuckGo News",
+                "url": "",
+            }]
+
 
 class NewsAPIProvider(LiveDataProvider):
     """
@@ -114,17 +157,28 @@ class NewsAPIProvider(LiveDataProvider):
                 "Install with: pip install requests"
             )
         self.base_url = "https://newsapi.org/v2/everything"
+        # NewsAPI only searches news. General questions ("what is X?") go to
+        # the web instead — when ddgs is installed.
+        self._web = DuckDuckGoSearchProvider() if DDGS is not None else None
 
     def search(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+        """General web search — delegated, because NewsAPI can only find news
+        articles that MENTION a topic, not pages that explain it."""
+        if self._web is not None:
+            return self._web.search(query, limit=limit)
+        return self.news(query, days=30, limit=limit)
+
+    def news(self, query: str, days: int = 7, limit: int = 10) -> List[Dict[str, Any]]:
         """
-        Search for recent news articles.
+        Search for news articles published in the last `days` days.
 
         Args:
             query: Search term
+            days:  Only articles from this many days back until today
             limit: Number of articles to return
 
         Returns:
-            List of news articles
+            List of news articles (with "date")
         """
         try:
             # sortBy=relevancy, not publishedAt. This tool answers questions,
@@ -136,6 +190,10 @@ class NewsAPIProvider(LiveDataProvider):
                 "sortBy": "relevancy",
                 "apiKey": self.api_key,
                 "pageSize": limit,
+                # Without these two, "last 7 days" returned articles from any
+                # date, in any language.
+                "from": (date.today() - timedelta(days=days)).isoformat(),
+                "language": "en",
             }
 
             response = requests.get(self.base_url, params=params, timeout=10)
@@ -163,7 +221,8 @@ class NewsAPIProvider(LiveDataProvider):
                     "title": article.get("title", ""),
                     "summary": article.get("description", "") or article.get("content", ""),
                     "url": article.get("url", ""),
-                    "source": article.get("source", {}).get("name", "NewsAPI")
+                    "source": article.get("source", {}).get("name", "NewsAPI"),
+                    "date": (article.get("publishedAt") or "")[:10],
                 })
 
             return results
@@ -207,8 +266,8 @@ def create_live_data_provider(
 
     Args:
         provider: Provider name (overrides env var). Options:
-                 - "duckduckgo" — free web search (no API key needed)
-                 - "newsapi" — news search (requires NEWS_API_KEY env var)
+                 - "duckduckgo" — web + news search via ddgs (no API key needed)
+                 - "newsapi" — news via NewsAPI (NEWS_API_KEY), web via ddgs
                  - "mock" — returns synthetic data (for testing/demo)
         **kwargs: Additional arguments passed to the provider
 

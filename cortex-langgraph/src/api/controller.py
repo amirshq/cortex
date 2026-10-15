@@ -14,6 +14,9 @@ from src.database.dto import (
     RAGQueryRequest,
     RAGQueryResponse,
     RAGUploadResponse,
+    RAGDocumentsResponse,
+    RAGHistoryResponse,
+    RAGHistoryClearResponse,
 )
 from src.api.metrics import (
     CHAT_MODEL_REQUESTS_TOTAL,
@@ -25,7 +28,13 @@ from src.api.metrics import (
     RAG_DOCUMENTS_INDEXED_TOTAL,
 )
 from src.business.chatbot import process_chat_message, get_chat_history
-from src.business.rag import query_rag, ingest_pdfs
+from src.business.rag import (
+    query_rag,
+    ingest_pdfs,
+    list_indexed_documents,
+    get_rag_history,
+    clear_rag_history,
+)
 from src.business.core.cost import calculate_chat_cost
 from src.memory.chat_history_manager import ChatHistoryManager
 import os
@@ -236,7 +245,8 @@ class RAGController:
                 detail="Question cannot be empty",
             )
         try:
-            result = await query_rag(request.question)
+            user_id = str(request.user_id) if request.user_id else None
+            result = await query_rag(request.question, user_id=user_id)
             return RAGQueryResponse(answer=result["answer"], sources=result["sources"])
         except Exception as e:
             raise HTTPException(
@@ -279,6 +289,44 @@ class RAGController:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"PDF upload failed: {str(e)}",
+            )
+
+
+    @staticmethod
+    def documents() -> RAGDocumentsResponse:
+        """Which PDFs are currently indexed — lets the UI restore its file list."""
+        try:
+            return RAGDocumentsResponse(documents=list_indexed_documents())
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to list documents: {str(e)}",
+            )
+
+    @staticmethod
+    def history(user_id: int) -> RAGHistoryResponse:
+        """A user's saved PDF Q&A, oldest first."""
+        if user_id <= 0:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid user_id")
+        try:
+            return RAGHistoryResponse(items=get_rag_history(str(user_id)))
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to load RAG history: {str(e)}",
+            )
+
+    @staticmethod
+    def clear_history(user_id: int) -> RAGHistoryClearResponse:
+        """Delete a user's saved PDF Q&A."""
+        if user_id <= 0:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid user_id")
+        try:
+            return RAGHistoryClearResponse(deleted=clear_rag_history(str(user_id)))
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to clear RAG history: {str(e)}",
             )
 
 

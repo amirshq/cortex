@@ -1,0 +1,1602 @@
+{
+  "label": "qp-rewrite",
+  "created": "2026-10-07 08:14",
+  "golden": "/Users/amirshahcheraghian/AI Projects/cortex/cortex-langgraph/tests/evals/data/ai_engineering_golden.json",
+  "config": {
+    "models": {
+      "chat": {
+        "name": "gpt-4o"
+      },
+      "rag": {
+        "name": "gpt-4o-mini",
+        "temperature": 0.0,
+        "max_tokens": 512
+      },
+      "embedding": {
+        "name": "text-embedding-3-large"
+      },
+      "reranker": {
+        "name": "none"
+      },
+      "judge": {
+        "name": "gpt-4o",
+        "temperature": 0
+      }
+    },
+    "rag": {
+      "chunking": {
+        "chunk_size": 800,
+        "chunk_overlap": 100,
+        "strategy": "recursive"
+      },
+      "indexing": {
+        "embedding_batch_size": 500
+      },
+      "retrieval": {
+        "top_k": 10,
+        "top_n": 5,
+        "fallback_policy": "hybrid"
+      },
+      "reranker": {
+        "min_score": null,
+        "device": "cpu",
+        "batch_size": 8,
+        "blend_with_vector_score": false,
+        "blend_alpha": 0.5
+      },
+      "query_processing": "rewrite"
+    },
+    "judge": true,
+    "index": {
+      "persist_dir": "data/experiments/embed-large",
+      "chunks": 1812,
+      "chunk_strategy": "table_aware_800_overlap_100"
+    }
+  },
+  "summary": {
+    "answerable": 24,
+    "unanswerable": 6,
+    "index_coverage": 0.958,
+    "recall@1": 0.75,
+    "recall@5": 0.792,
+    "recall@top_k": 0.833,
+    "mrr@top_k": 0.77,
+    "reranker": {
+      "mrr_before": 0.77,
+      "mrr_after": 0.77,
+      "mrr_lift": 0.0,
+      "recall@1_before": 0.75,
+      "recall@1_after": 0.75,
+      "recall@5_before": 0.792,
+      "recall@5_after": 0.792,
+      "improved": 0,
+      "worsened": 0,
+      "unchanged": 24
+    },
+    "context_recall_any": 0.792,
+    "context_recall_all": 0.708,
+    "answer_accuracy": 0.792,
+    "refusal_rate": 1.0,
+    "low_confidence_rate": 0.0,
+    "avg_seconds": 1.981,
+    "latency": {
+      "query": {
+        "mean": 0.758,
+        "p50": 0.702,
+        "p95": 0.97,
+        "share": 0.383
+      },
+      "embed": {
+        "mean": 0.273,
+        "p50": 0.263,
+        "p95": 0.462,
+        "share": 0.138
+      },
+      "search": {
+        "mean": 0.01,
+        "p50": 0.01,
+        "p95": 0.019,
+        "share": 0.005
+      },
+      "rerank": {
+        "mean": 0.0,
+        "p50": 0.0,
+        "p95": 0.001,
+        "share": 0.0
+      },
+      "generate": {
+        "mean": 0.938,
+        "p50": 0.845,
+        "p95": 2.396,
+        "share": 0.474
+      },
+      "total": {
+        "mean": 1.981,
+        "p50": 1.817,
+        "p95": 3.395,
+        "share": 1.0
+      }
+    },
+    "cost": {
+      "models": {
+        "embedding": "text-embedding-3-large",
+        "llm": "gpt-4o-mini"
+      },
+      "avg_embed_tokens": 12.8,
+      "avg_llm_input_tokens": 1012.9,
+      "avg_llm_output_tokens": 37.3,
+      "avg_embed_usd": 1.67e-06,
+      "avg_llm_usd": 0.00017423,
+      "avg_usd_per_question": 0.0001759,
+      "embed_share": 0.009,
+      "llm_share": 0.991,
+      "usd_per_1000_questions": 0.1759,
+      "usd_this_run": 0.005277,
+      "index_one_time": {
+        "chunks": 1812,
+        "tokens": 246455,
+        "usd": 0.032039
+      }
+    },
+    "by_type": {
+      "fact": {
+        "n": 6,
+        "recall@5": 0.667,
+        "context_recall": 0.667,
+        "accuracy": 0.667
+      },
+      "numeric": {
+        "n": 5,
+        "recall@5": 1.0,
+        "context_recall": 1.0,
+        "accuracy": 1.0
+      },
+      "table": {
+        "n": 4,
+        "recall@5": 1.0,
+        "context_recall": 1.0,
+        "accuracy": 1.0
+      },
+      "multi-hop": {
+        "n": 5,
+        "recall@5": 1.0,
+        "context_recall": 1.0,
+        "accuracy": 1.0
+      },
+      "paraphrase": {
+        "n": 4,
+        "recall@5": 0.25,
+        "context_recall": 0.25,
+        "accuracy": 0.25
+      }
+    },
+    "top_k": 10,
+    "top_n": 5,
+    "groundedness": {
+      "judge_model": "gpt-4o",
+      "answers_with_claims": 21,
+      "answers_without_claims": 9,
+      "grounded_rate": 0.857,
+      "claim_support_rate": 0.93,
+      "claims": 43,
+      "supported_claims": 40,
+      "ungrounded_ids": [
+        "q19",
+        "q20",
+        "q27"
+      ],
+      "judge_usd_this_run": 0.2575
+    },
+    "relevance": {
+      "answered": 21,
+      "answers": 20,
+      "partial": 1,
+      "does_not_answer": 0,
+      "relevance_rate": 0.952,
+      "relevance_score": 0.976,
+      "refused_answerable": [
+        "q01",
+        "q02",
+        "q29"
+      ],
+      "refused_unanswerable": 6,
+      "not_fully_relevant_ids": [
+        "q18"
+      ]
+    }
+  },
+  "results": [
+    {
+      "id": "q01",
+      "type": "fact",
+      "question": "How did Anton Bacaj describe AI engineering to the author?",
+      "answer": "I don't know.",
+      "confidence": "high",
+      "seconds": 1.406,
+      "latency": {
+        "query": 0.462,
+        "embed": 0.344,
+        "search": 0.011,
+        "rerank": 0.0,
+        "generate": 0.589,
+        "total": 1.406
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 8,
+        "llm_input_tokens": 956,
+        "llm_output_tokens": 11,
+        "embed_usd": 1e-06,
+        "llm_usd": 0.00015,
+        "total_usd": 0.000151
+      },
+      "search_queries": [
+        "Anton Bacaj AI engineering description author"
+      ],
+      "groundedness": {
+        "claims": 0,
+        "supported": 0,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "refusal",
+        "reason": "The answer states that the information is not known."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 7,
+      "reranked_rank": 7,
+      "recall_any@1": false,
+      "recall_any@5": false,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": false,
+      "context_recall_all": false,
+      "correct": false
+    },
+    {
+      "id": "q02",
+      "type": "fact",
+      "question": "According to the book, how many epochs of data are large models typically pre-trained on?",
+      "answer": "I don't know.",
+      "confidence": "high",
+      "seconds": 1.455,
+      "latency": {
+        "query": 0.537,
+        "embed": 0.243,
+        "search": 0.012,
+        "rerank": 0.0,
+        "generate": 0.662,
+        "total": 1.455
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 8,
+        "llm_input_tokens": 999,
+        "llm_output_tokens": 12,
+        "embed_usd": 1e-06,
+        "llm_usd": 0.000157,
+        "total_usd": 0.000158
+      },
+      "search_queries": [
+        "\"large models pre-training epochs count\""
+      ],
+      "groundedness": {
+        "claims": 0,
+        "supported": 0,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "refusal",
+        "reason": "The answer states that the information is not known."
+      },
+      "evidence_in_index": 0.0,
+      "first_rank": null,
+      "reranked_rank": null,
+      "recall_any@1": false,
+      "recall_any@5": false,
+      "recall_any@top_k": false,
+      "evidence_found@top_k": 0.0,
+      "context_recall_any": false,
+      "context_recall_all": false,
+      "correct": false
+    },
+    {
+      "id": "q03",
+      "type": "fact",
+      "question": "Why does the author warn against comparing Azure AI Studio's relevance scores with MLflow's relevance scores?",
+      "answer": "The author warns against comparing Azure AI Studio's relevance scores with MLflow's relevance scores because these scores are not standardized and can vary significantly due to differences in the underlying models and prompts used by each tool.",
+      "confidence": "high",
+      "seconds": 1.817,
+      "latency": {
+        "query": 0.637,
+        "embed": 0.243,
+        "search": 0.008,
+        "rerank": 0.0,
+        "generate": 0.928,
+        "total": 1.817
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 13,
+        "llm_input_tokens": 954,
+        "llm_output_tokens": 54,
+        "embed_usd": 2e-06,
+        "llm_usd": 0.000175,
+        "total_usd": 0.000177
+      },
+      "search_queries": [
+        "\"Azure AI Studio relevance scores comparison MLflow relevance scores warning\""
+      ],
+      "groundedness": {
+        "claims": 4,
+        "supported": 4,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer explains why the author warns against comparing the relevance scores of the two tools."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q04",
+      "type": "fact",
+      "question": "What does the author believe is the biggest bottleneck to AI adoption?",
+      "answer": "The author believes that evaluation is the biggest bottleneck to AI adoption.",
+      "confidence": "high",
+      "seconds": 1.925,
+      "latency": {
+        "query": 0.757,
+        "embed": 0.231,
+        "search": 0.01,
+        "rerank": 0.0,
+        "generate": 0.926,
+        "total": 1.925
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 8,
+        "llm_input_tokens": 930,
+        "llm_output_tokens": 23,
+        "embed_usd": 1e-06,
+        "llm_usd": 0.000153,
+        "total_usd": 0.000154
+      },
+      "search_queries": [
+        "biggest bottleneck to AI adoption author perspective"
+      ],
+      "groundedness": {
+        "claims": 1,
+        "supported": 1,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer directly states what the author believes is the biggest bottleneck to AI adoption."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q05",
+      "type": "fact",
+      "question": "According to what some teams told the author, in what format does data work best for their retrieval systems?",
+      "answer": "According to what some teams told the author, data works best for their retrieval systems when it is organized in a question-and-answer format.",
+      "confidence": "high",
+      "seconds": 1.759,
+      "latency": {
+        "query": 0.522,
+        "embed": 0.227,
+        "search": 0.011,
+        "rerank": 0.0,
+        "generate": 0.998,
+        "total": 1.759
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 9,
+        "llm_input_tokens": 919,
+        "llm_output_tokens": 36,
+        "embed_usd": 1e-06,
+        "llm_usd": 0.000159,
+        "total_usd": 0.00016
+      },
+      "search_queries": [
+        "data format optimal for retrieval systems feedback from teams"
+      ],
+      "groundedness": {
+        "claims": 1,
+        "supported": 1,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer directly states the format in which data works best for retrieval systems, as asked."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q06",
+      "type": "fact",
+      "question": "Why does the author consider semantic caching's value more dubious than other caching techniques?",
+      "answer": "The author considers semantic caching's value more dubious than other caching techniques because many of its components are prone to failure, its success relies on high-quality embeddings and a reliable similarity metric, and setting the right similarity threshold can be tricky. Additionally, semantic caching can be time-consuming and compute-intensive, depending on the size of the cached embeddings.",
+      "confidence": "high",
+      "seconds": 2.364,
+      "latency": {
+        "query": 0.874,
+        "embed": 0.178,
+        "search": 0.006,
+        "rerank": 0.001,
+        "generate": 1.305,
+        "total": 2.364
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 8,
+        "llm_input_tokens": 959,
+        "llm_output_tokens": 75,
+        "embed_usd": 1e-06,
+        "llm_usd": 0.000189,
+        "total_usd": 0.00019
+      },
+      "search_queries": [
+        "semantic caching value comparison dubious other caching techniques"
+      ],
+      "groundedness": {
+        "claims": 5,
+        "supported": 5,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer directly addresses why the author considers semantic caching's value more dubious, listing specific reasons."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q07",
+      "type": "numeric",
+      "question": "As of September 2024, what did Amazon SageMaker Ground Truth charge per image for labeling, according to the book?",
+      "answer": "As of September 2024, Amazon SageMaker Ground Truth charges 8 cents per image for labeling fewer than 50,000 images, but only 2 cents per image for labeling more than 1 million images.",
+      "confidence": "high",
+      "seconds": 3.32,
+      "latency": {
+        "query": 0.654,
+        "embed": 0.264,
+        "search": 0.006,
+        "rerank": 0.0,
+        "generate": 2.396,
+        "total": 3.32
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 14,
+        "llm_input_tokens": 981,
+        "llm_output_tokens": 58,
+        "embed_usd": 2e-06,
+        "llm_usd": 0.000182,
+        "total_usd": 0.000184
+      },
+      "search_queries": [
+        "Amazon SageMaker Ground Truth pricing per image for labeling September 2024"
+      ],
+      "groundedness": {
+        "claims": 2,
+        "supported": 2,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer provides the specific charges per image for labeling as requested."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q08",
+      "type": "numeric",
+      "question": "How many queries does the PAIR attack often need to produce a jailbreak?",
+      "answer": "PAIR often requires fewer than twenty queries to produce a jailbreak.",
+      "confidence": "high",
+      "seconds": 2.087,
+      "latency": {
+        "query": 0.884,
+        "embed": 0.259,
+        "search": 0.024,
+        "rerank": 0.001,
+        "generate": 0.919,
+        "total": 2.087
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 10,
+        "llm_input_tokens": 972,
+        "llm_output_tokens": 21,
+        "embed_usd": 1e-06,
+        "llm_usd": 0.000158,
+        "total_usd": 0.000159
+      },
+      "search_queries": [
+        "\"PAIR attack query count for jailbreak production\""
+      ],
+      "groundedness": {
+        "claims": 1,
+        "supported": 1,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer directly provides the number of queries needed for the PAIR attack to produce a jailbreak."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q09",
+      "type": "numeric",
+      "question": "How many bits does the TF32 format actually occupy?",
+      "answer": "TF32 actually has 19 bits.",
+      "confidence": "high",
+      "seconds": 1.264,
+      "latency": {
+        "query": 0.512,
+        "embed": 0.191,
+        "search": 0.012,
+        "rerank": 0.0,
+        "generate": 0.549,
+        "total": 1.264
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 5,
+        "llm_input_tokens": 1142,
+        "llm_output_tokens": 13,
+        "embed_usd": 1e-06,
+        "llm_usd": 0.000179,
+        "total_usd": 0.00018
+      },
+      "search_queries": [
+        "TF32 format bit occupancy"
+      ],
+      "groundedness": {
+        "claims": 1,
+        "supported": 1,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer directly provides the number of bits in the TF32 format."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q10",
+      "type": "numeric",
+      "question": "In the LIMA study cited by the book, in what percentage of cases were the finetuned model's answers equivalent or strictly preferred to GPT-4?",
+      "answer": "In the LIMA study, the finetuned model's answers were equivalent or strictly preferred to GPT-4 in 43% of cases.",
+      "confidence": "high",
+      "seconds": 1.851,
+      "latency": {
+        "query": 0.712,
+        "embed": 0.251,
+        "search": 0.014,
+        "rerank": 0.0,
+        "generate": 0.875,
+        "total": 1.851
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 17,
+        "llm_input_tokens": 1078,
+        "llm_output_tokens": 45,
+        "embed_usd": 2e-06,
+        "llm_usd": 0.000189,
+        "total_usd": 0.000191
+      },
+      "search_queries": [
+        "LIMA study finetuned model performance percentage equivalent or preferred to GPT-4"
+      ],
+      "groundedness": {
+        "claims": 1,
+        "supported": 1,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer provides the specific percentage requested in the question."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q11",
+      "type": "numeric",
+      "question": "In the book's MBU example, what bandwidth does a 7B-parameter FP16 model at 100 tokens/s use, and what is the MBU on an A100-80GB?",
+      "answer": "The bandwidth used by a 7B-parameter FP16 model at 100 tokens/s is 700 GB/s. The MBU on an A100-80GB is 70%.",
+      "confidence": "high",
+      "seconds": 2.22,
+      "latency": {
+        "query": 0.727,
+        "embed": 0.305,
+        "search": 0.009,
+        "rerank": 0.001,
+        "generate": 1.179,
+        "total": 2.22
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 20,
+        "llm_input_tokens": 1093,
+        "llm_output_tokens": 59,
+        "embed_usd": 3e-06,
+        "llm_usd": 0.000199,
+        "total_usd": 0.000202
+      },
+      "search_queries": [
+        "\"7B-parameter FP16 model bandwidth 100 tokens/s MBU A100-80GB\""
+      ],
+      "groundedness": {
+        "claims": 2,
+        "supported": 2,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer provides both the bandwidth and the MBU as requested."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q12",
+      "type": "table",
+      "question": "According to the book's table of Llama model dimensions, how many transformer blocks does Llama 3-405B have?",
+      "answer": "Llama 3-405B has 126 transformer blocks.",
+      "confidence": "high",
+      "seconds": 1.328,
+      "latency": {
+        "query": 0.544,
+        "embed": 0.206,
+        "search": 0.009,
+        "rerank": 0.0,
+        "generate": 0.568,
+        "total": 1.328
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 12,
+        "llm_input_tokens": 1296,
+        "llm_output_tokens": 25,
+        "embed_usd": 2e-06,
+        "llm_usd": 0.000209,
+        "total_usd": 0.000211
+      },
+      "search_queries": [
+        "Llama 3-405B transformer block count dimensions table"
+      ],
+      "groundedness": {
+        "claims": 1,
+        "supported": 1,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer provides the specific number of transformer blocks for Llama 3-405B as requested."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q13",
+      "type": "table",
+      "question": "Per the OpenAI estimate shown in the book, roughly how many evaluation samples are needed to detect a 1% score difference with 95% confidence?",
+      "answer": "Approximately 10,000 evaluation samples are needed to detect a 1% score difference with 95% confidence.",
+      "confidence": "high",
+      "seconds": 1.757,
+      "latency": {
+        "query": 0.821,
+        "embed": 0.256,
+        "search": 0.01,
+        "rerank": 0.001,
+        "generate": 0.669,
+        "total": 1.757
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 14,
+        "llm_input_tokens": 971,
+        "llm_output_tokens": 37,
+        "embed_usd": 2e-06,
+        "llm_usd": 0.000168,
+        "total_usd": 0.00017
+      },
+      "search_queries": [
+        "OpenAI estimate evaluation samples 1% score difference 95% confidence"
+      ],
+      "groundedness": {
+        "claims": 1,
+        "supported": 1,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer provides the specific number of evaluation samples needed as requested."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q14",
+      "type": "table",
+      "question": "How much memory does a LoRA adapter for GPT-3 (175B) need in 16 bits, compared with the model's weights?",
+      "answer": "A LoRA adapter for GPT-3 (175B) needs 37.7 MB in 16 bits, compared to the model's weights which require 350 GB.",
+      "confidence": "high",
+      "seconds": 2.303,
+      "latency": {
+        "query": 0.613,
+        "embed": 0.501,
+        "search": 0.007,
+        "rerank": 0.0,
+        "generate": 1.181,
+        "total": 2.303
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 23,
+        "llm_input_tokens": 903,
+        "llm_output_tokens": 57,
+        "embed_usd": 3e-06,
+        "llm_usd": 0.00017,
+        "total_usd": 0.000173
+      },
+      "search_queries": [
+        "LoRA adapter memory requirements for GPT-3 (175B) in 16-bit precision compared to model weights"
+      ],
+      "groundedness": {
+        "claims": 2,
+        "supported": 2,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer provides the memory needed for both the LoRA adapter and the model's weights, as requested."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q15",
+      "type": "table",
+      "question": "In the FITS feedback clustering table, which feedback type was most common and what share did it represent?",
+      "answer": "The most common feedback type in the FITS feedback clustering table was \"Clarify their demand again,\" which represented 26.54%.",
+      "confidence": "high",
+      "seconds": 1.941,
+      "latency": {
+        "query": 0.811,
+        "embed": 0.247,
+        "search": 0.01,
+        "rerank": 0.001,
+        "generate": 0.873,
+        "total": 1.941
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 11,
+        "llm_input_tokens": 1002,
+        "llm_output_tokens": 38,
+        "embed_usd": 1e-06,
+        "llm_usd": 0.000173,
+        "total_usd": 0.000174
+      },
+      "search_queries": [
+        "FITS feedback clustering table most common feedback type share percentage"
+      ],
+      "groundedness": {
+        "claims": 2,
+        "supported": 2,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer provides both the most common feedback type and its share, as requested."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q16",
+      "type": "multi-hop",
+      "question": "Anthropic is cited both for a chunk-contextualization technique and for prompt caching. How long is the context Anthropic generates per chunk, and what maximum cost savings does its prompt caching promise?",
+      "answer": "Anthropic generates a context of 50-100 tokens per chunk and its prompt caching promises up to 90% cost savings.",
+      "confidence": "high",
+      "seconds": 1.621,
+      "latency": {
+        "query": 0.597,
+        "embed": 0.23,
+        "search": 0.019,
+        "rerank": 0.001,
+        "generate": 0.774,
+        "total": 1.621
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 17,
+        "llm_input_tokens": 1048,
+        "llm_output_tokens": 43,
+        "embed_usd": 2e-06,
+        "llm_usd": 0.000183,
+        "total_usd": 0.000185
+      },
+      "search_queries": [
+        "\"Anthropic chunk-contextualization technique context length and prompt caching maximum cost savings\""
+      ],
+      "groundedness": {
+        "claims": 2,
+        "supported": 2,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer provides both the context length and the maximum cost savings as requested."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q17",
+      "type": "multi-hop",
+      "question": "How many tokens did Meta train Llama 3 on, and how does Llama 3's vocabulary size compare with Llama 2's in the book's dimension table?",
+      "answer": "Meta trained Llama 3 on 15 trillion tokens. Llama 3's vocabulary size is 128K, while Llama 2's vocabulary size is 32K.",
+      "confidence": "high",
+      "seconds": 1.921,
+      "latency": {
+        "query": 0.801,
+        "embed": 0.269,
+        "search": 0.006,
+        "rerank": 0.0,
+        "generate": 0.845,
+        "total": 1.921
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 19,
+        "llm_input_tokens": 1060,
+        "llm_output_tokens": 56,
+        "embed_usd": 2e-06,
+        "llm_usd": 0.000193,
+        "total_usd": 0.000195
+      },
+      "search_queries": [
+        "Meta Llama 3 token count training and vocabulary size comparison with Llama 2 dimension table"
+      ],
+      "groundedness": {
+        "claims": 3,
+        "supported": 3,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer provides both the number of tokens Llama 3 was trained on and compares its vocabulary size with Llama 2's."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q18",
+      "type": "multi-hop",
+      "question": "How many tools did Chameleon use and how much did it improve the best published few-shot result on ScienceQA, compared with how many tools Toolformer learned?",
+      "answer": "Chameleon used a set of 13 tools and improved the best published few-shot result on ScienceQA by 11.37%. The context does not provide information on how many tools Toolformer learned.",
+      "confidence": "high",
+      "seconds": 2.661,
+      "latency": {
+        "query": 0.715,
+        "embed": 0.336,
+        "search": 0.011,
+        "rerank": 0.001,
+        "generate": 1.599,
+        "total": 2.661
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 21,
+        "llm_input_tokens": 1129,
+        "llm_output_tokens": 61,
+        "embed_usd": 3e-06,
+        "llm_usd": 0.000206,
+        "total_usd": 0.000209
+      },
+      "search_queries": [
+        "Chameleon tools count and improvement on best published few-shot result on ScienceQA compared to Toolformer tools learned"
+      ],
+      "groundedness": {
+        "claims": 2,
+        "supported": 2,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "partial",
+        "reason": "The answer provides the number of tools Chameleon used and the improvement percentage, but does not provide the number of tools Toolformer learned."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": false,
+      "correct": true
+    },
+    {
+      "id": "q19",
+      "type": "multi-hop",
+      "question": "On the current-events QA study cited in the book, what score did Mistral-7B reach with RAG, and how large can vector database spending get relative to model API spending?",
+      "answer": "Mistral-7B reached a score of 0.875 with RAG. The total cost for commercial APIs can come out to $80,000-$100,000, which indicates that vector database spending can be significant relative to model API spending.",
+      "confidence": "high",
+      "seconds": 4.206,
+      "latency": {
+        "query": 2.868,
+        "embed": 0.462,
+        "search": 0.009,
+        "rerank": 0.001,
+        "generate": 0.867,
+        "total": 4.206
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 20,
+        "llm_input_tokens": 991,
+        "llm_output_tokens": 72,
+        "embed_usd": 3e-06,
+        "llm_usd": 0.000192,
+        "total_usd": 0.000195
+      },
+      "search_queries": [
+        "\"Mistral-7B RAG score current-events QA study vector database spending model API spending\""
+      ],
+      "groundedness": {
+        "claims": 3,
+        "supported": 2,
+        "grounded": false,
+        "unsupported": [
+          "Vector database spending can be significant relative to model API spending."
+        ]
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer provides both the score Mistral-7B reached with RAG and information on vector database spending relative to model API spending."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 0.5,
+      "context_recall_any": true,
+      "context_recall_all": false,
+      "correct": true
+    },
+    {
+      "id": "q20",
+      "type": "multi-hop",
+      "question": "The book's semantic cache stores embeddings of cached queries in a vector database. If those embeddings came from OpenAI's text-embedding-3-large, how many dimensions would each have?",
+      "answer": "Each embedding from OpenAI's text-embedding-3-large would have 3072 dimensions.",
+      "confidence": "high",
+      "seconds": 1.716,
+      "latency": {
+        "query": 0.653,
+        "embed": 0.282,
+        "search": 0.007,
+        "rerank": 0.0,
+        "generate": 0.774,
+        "total": 1.716
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 18,
+        "llm_input_tokens": 954,
+        "llm_output_tokens": 37,
+        "embed_usd": 2e-06,
+        "llm_usd": 0.000165,
+        "total_usd": 0.000167
+      },
+      "search_queries": [
+        "\"OpenAI text-embedding-3-large dimensions of embeddings in semantic cache vector database\""
+      ],
+      "groundedness": {
+        "claims": 1,
+        "supported": 0,
+        "grounded": false,
+        "unsupported": [
+          "Each embedding from OpenAI's text-embedding-3-large would have 3072 dimensions."
+        ]
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer provides the specific number of dimensions requested."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 1,
+      "reranked_rank": 1,
+      "recall_any@1": true,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q21",
+      "type": "unanswerable",
+      "question": "What similarity threshold does the author recommend for semantic caching?",
+      "answer": "I don't know.",
+      "confidence": "high",
+      "seconds": 1.459,
+      "latency": {
+        "query": 0.702,
+        "embed": 0.236,
+        "search": 0.01,
+        "rerank": 0.0,
+        "generate": 0.511,
+        "total": 1.459
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 5,
+        "llm_input_tokens": 970,
+        "llm_output_tokens": 9,
+        "embed_usd": 1e-06,
+        "llm_usd": 0.000151,
+        "total_usd": 0.000152
+      },
+      "search_queries": [
+        "semantic caching similarity threshold recommendation"
+      ],
+      "groundedness": {
+        "claims": 0,
+        "supported": 0,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "refusal",
+        "reason": "The answer states that the information is not known."
+      },
+      "refused": true
+    },
+    {
+      "id": "q22",
+      "type": "unanswerable",
+      "question": "How much does Anthropic charge per million tokens per hour for prompt cache storage?",
+      "answer": "I don't know.",
+      "confidence": "high",
+      "seconds": 1.564,
+      "latency": {
+        "query": 0.832,
+        "embed": 0.21,
+        "search": 0.009,
+        "rerank": 0.001,
+        "generate": 0.512,
+        "total": 1.564
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 11,
+        "llm_input_tokens": 1010,
+        "llm_output_tokens": 15,
+        "embed_usd": 1e-06,
+        "llm_usd": 0.00016,
+        "total_usd": 0.000161
+      },
+      "search_queries": [
+        "Anthropic prompt cache storage pricing per million tokens per hour"
+      ],
+      "groundedness": {
+        "claims": 0,
+        "supported": 0,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "refusal",
+        "reason": "The answer states it does not know the information requested."
+      },
+      "refused": true
+    },
+    {
+      "id": "q23",
+      "type": "unanswerable",
+      "question": "How many GPU hours were needed to finetune the 65B Llama model in the LIMA study?",
+      "answer": "I don't know.",
+      "confidence": "high",
+      "seconds": 1.651,
+      "latency": {
+        "query": 0.547,
+        "embed": 0.278,
+        "search": 0.01,
+        "rerank": 0.0,
+        "generate": 0.815,
+        "total": 1.651
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 17,
+        "llm_input_tokens": 1048,
+        "llm_output_tokens": 21,
+        "embed_usd": 2e-06,
+        "llm_usd": 0.00017,
+        "total_usd": 0.000172
+      },
+      "search_queries": [
+        "GPU hours required for finetuning 65B Llama model in LIMA study"
+      ],
+      "groundedness": {
+        "claims": 0,
+        "supported": 0,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "refusal",
+        "reason": "The answer states that the information is not known."
+      },
+      "refused": true
+    },
+    {
+      "id": "q24",
+      "type": "unanswerable",
+      "question": "By how much did Chameleon improve accuracy on the MMLU benchmark?",
+      "answer": "I don't know.",
+      "confidence": "high",
+      "seconds": 1.47,
+      "latency": {
+        "query": 0.635,
+        "embed": 0.263,
+        "search": 0.011,
+        "rerank": 0.0,
+        "generate": 0.561,
+        "total": 1.47
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 8,
+        "llm_input_tokens": 920,
+        "llm_output_tokens": 12,
+        "embed_usd": 1e-06,
+        "llm_usd": 0.000145,
+        "total_usd": 0.000146
+      },
+      "search_queries": [
+        "Chameleon accuracy improvement MMLU benchmark"
+      ],
+      "groundedness": {
+        "claims": 0,
+        "supported": 0,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "refusal",
+        "reason": "The answer states that it does not know the information requested."
+      },
+      "refused": true
+    },
+    {
+      "id": "q25",
+      "type": "unanswerable",
+      "question": "What did BloombergGPT's training data cost?",
+      "answer": "I don't know.",
+      "confidence": "high",
+      "seconds": 1.306,
+      "latency": {
+        "query": 0.455,
+        "embed": 0.319,
+        "search": 0.011,
+        "rerank": 0.001,
+        "generate": 0.521,
+        "total": 1.306
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 7,
+        "llm_input_tokens": 987,
+        "llm_output_tokens": 10,
+        "embed_usd": 1e-06,
+        "llm_usd": 0.000154,
+        "total_usd": 0.000155
+      },
+      "search_queries": [
+        "BloombergGPT training data cost"
+      ],
+      "groundedness": {
+        "claims": 0,
+        "supported": 0,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "refusal",
+        "reason": "The answer states that the information is not known."
+      },
+      "refused": true
+    },
+    {
+      "id": "q26",
+      "type": "unanswerable",
+      "question": "What MFU did Meta achieve when training Llama 3 405B?",
+      "answer": "I don't know.",
+      "confidence": "high",
+      "seconds": 1.966,
+      "latency": {
+        "query": 0.97,
+        "embed": 0.315,
+        "search": 0.011,
+        "rerank": 0.001,
+        "generate": 0.67,
+        "total": 1.966
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 12,
+        "llm_input_tokens": 1276,
+        "llm_output_tokens": 16,
+        "embed_usd": 2e-06,
+        "llm_usd": 0.000201,
+        "total_usd": 0.000203
+      },
+      "search_queries": [
+        "Meta Llama 3 405B MFU training performance"
+      ],
+      "groundedness": {
+        "claims": 0,
+        "supported": 0,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "refusal",
+        "reason": "The answer states that the information is not known."
+      },
+      "refused": true
+    },
+    {
+      "id": "q27",
+      "type": "paraphrase",
+      "question": "When customizing a language model, which method does the author say should shape how responses look, and which should supply the information in them?",
+      "answer": "The author states that preference finetuning should shape how responses look, while supervised finetuning should supply the information in them.",
+      "confidence": "high",
+      "seconds": 1.813,
+      "latency": {
+        "query": 0.96,
+        "embed": 0.245,
+        "search": 0.008,
+        "rerank": 0.001,
+        "generate": 0.598,
+        "total": 1.813
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 11,
+        "llm_input_tokens": 897,
+        "llm_output_tokens": 37,
+        "embed_usd": 1e-06,
+        "llm_usd": 0.000157,
+        "total_usd": 0.000158
+      },
+      "search_queries": [
+        "customizing language model response shaping method vs information supply method"
+      ],
+      "groundedness": {
+        "claims": 2,
+        "supported": 1,
+        "grounded": false,
+        "unsupported": [
+          "Supervised finetuning should supply the information in responses."
+        ]
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer directly states which method shapes responses and which supplies information."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": null,
+      "reranked_rank": null,
+      "recall_any@1": false,
+      "recall_any@5": false,
+      "recall_any@top_k": false,
+      "evidence_found@top_k": 0.0,
+      "context_recall_any": false,
+      "context_recall_all": false,
+      "correct": false
+    },
+    {
+      "id": "q28",
+      "type": "paraphrase",
+      "question": "If a person fixes the code an assistant wrote, how can that correction be turned into a signal for aligning the system with what people want?",
+      "answer": "The correction made by a person to the code an assistant wrote can be turned into a signal for aligning the system with what people want by treating the original generated code as the \"losing response\" and the edited code as the \"winning response.\" This forms a preference example that can be used to align the model to human preferences.",
+      "confidence": "high",
+      "seconds": 3.395,
+      "latency": {
+        "query": 0.642,
+        "embed": 0.276,
+        "search": 0.007,
+        "rerank": 0.0,
+        "generate": 2.47,
+        "total": 3.395
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 12,
+        "llm_input_tokens": 971,
+        "llm_output_tokens": 78,
+        "embed_usd": 2e-06,
+        "llm_usd": 0.000192,
+        "total_usd": 0.000194
+      },
+      "search_queries": [
+        "\"code correction feedback mechanism for system alignment with user preferences\""
+      ],
+      "groundedness": {
+        "claims": 3,
+        "supported": 3,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer explains how a correction can be used as a signal for aligning the system with human preferences."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": 3,
+      "reranked_rank": 3,
+      "recall_any@1": false,
+      "recall_any@5": true,
+      "recall_any@top_k": true,
+      "evidence_found@top_k": 1.0,
+      "context_recall_any": true,
+      "context_recall_all": true,
+      "correct": true
+    },
+    {
+      "id": "q29",
+      "type": "paraphrase",
+      "question": "Which unglamorous chore did one of the people who started a well-known AI lab say pays off the most relative to the credit it earns?",
+      "answer": "I don't know.",
+      "confidence": "high",
+      "seconds": 1.73,
+      "latency": {
+        "query": 0.733,
+        "embed": 0.266,
+        "search": 0.009,
+        "rerank": 0.0,
+        "generate": 0.722,
+        "total": 1.73
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 15,
+        "llm_input_tokens": 968,
+        "llm_output_tokens": 19,
+        "embed_usd": 2e-06,
+        "llm_usd": 0.000157,
+        "total_usd": 0.000159
+      },
+      "search_queries": [
+        "\"unglamorous chore pays off most relative to credit AI lab founder\""
+      ],
+      "groundedness": {
+        "claims": 0,
+        "supported": 0,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "refusal",
+        "reason": "The answer states that the information is not known."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": null,
+      "reranked_rank": null,
+      "recall_any@1": false,
+      "recall_any@5": false,
+      "recall_any@top_k": false,
+      "evidence_found@top_k": 0.0,
+      "context_recall_any": false,
+      "context_recall_all": false,
+      "correct": false
+    },
+    {
+      "id": "q30",
+      "type": "paraphrase",
+      "question": "Some say crafting instructions for chatbots isn't a real discipline. How does the author think that work should be carried out?",
+      "answer": "The author believes that crafting instructions for chatbots should involve curating benchmarks to evaluate the model's capability to follow instructions using specific criteria. This includes incorporating relevant instructions, such as YAML instructions if needed, and considering roleplaying as a technique to improve the quality of a model's outputs.",
+      "confidence": "high",
+      "seconds": 2.139,
+      "latency": {
+        "query": 0.57,
+        "embed": 0.268,
+        "search": 0.008,
+        "rerank": 0.0,
+        "generate": 1.292,
+        "total": 2.139
+      },
+      "cost": {
+        "embedding_model": "text-embedding-3-large",
+        "embed_tokens": 11,
+        "llm_input_tokens": 1003,
+        "llm_output_tokens": 68,
+        "embed_usd": 1e-06,
+        "llm_usd": 0.000191,
+        "total_usd": 0.000192
+      },
+      "search_queries": [
+        "\"crafting instructions for chatbots discipline author perspective\""
+      ],
+      "groundedness": {
+        "claims": 3,
+        "supported": 3,
+        "grounded": true,
+        "unsupported": []
+      },
+      "relevance": {
+        "label": "answers",
+        "reason": "The answer explains how the author thinks crafting instructions for chatbots should be carried out."
+      },
+      "evidence_in_index": 1.0,
+      "first_rank": null,
+      "reranked_rank": null,
+      "recall_any@1": false,
+      "recall_any@5": false,
+      "recall_any@top_k": false,
+      "evidence_found@top_k": 0.0,
+      "context_recall_any": false,
+      "context_recall_all": false,
+      "correct": false
+    }
+  ]
+}

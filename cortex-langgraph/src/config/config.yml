@@ -1,35 +1,62 @@
-embedding_model_name: "text-embedding-ada-002"
-max_tokens: 4096
-
-llm_config: 
-  llm_system_role: "You are a helpful assistant. Use the following context to answer the question."
-
-
-llm_model_name: "gpt-3.5-turbo"
-temperature: 0.7
-max_token: 1500
-
-
+# Non-secret application settings. Loaded by src/utils/config.py.
+#
+# Secrets and per-environment values — API keys, endpoints, and the provider
+# switches (LLM_PROVIDER, EMBEDDING_PROVIDER, ...) — live in .env instead.
+# Duplicate keys are rejected at load time (see utils/config.py).
 
 directories:
   db_path: "data/chatbot.db"
   vectordb_dir: "data/vectordb"
 
-llm_config:
-  chat_model: "gpt-4o"
-  summary_model: "gpt-3.5-turbo"
-  rag_model: "gpt-4o-mini"
-  temperature: 0.0
+# Every model the app uses — the ONE place to change them.
+#
+# Names are OpenAI model names. With LLM_PROVIDER / EMBEDDING_PROVIDER=azure_openai
+# the Azure *deployment* names from .env are used instead
+# (AZURE_OPENAI_CHAT_DEPLOYMENT_NAME / AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME),
+# and with LLM_PROVIDER=huggingface the local model is HF_MODEL_NAME.
+models:
+  chat:                    # the agent behind POST /chat
+    name: "gpt-4o"
+  rag:                     # answers POST /rag/query from retrieved chunks
+    name: "gpt-4.1"        # exp 3.6: grounded answers 0.83 → 0.96 vs gpt-4o-mini, at ~$2 vs $0.15
+                           # per 1,000 questions ("gpt-4o-mini" is the cheap option)
+    temperature: 0         # repeatable answers, as in every experiment
+    max_tokens: 512
+  embedding:               # chat memory (data/vectordb). Changing this requires
+    name: "text-embedding-3-small"   # rebuilding that store: vectors from different models aren't comparable
+  rag_embedding:           # the RAG index (data/rag_vectorstore). Changing this requires re-indexing.
+    name: "text-embedding-3-large"   # exp 3.2: accuracy 0.75 → 0.875, paraphrase 0/4 → 2/4
+  reranker:                # cross-encoder that scores retrieved chunks, or "none" = keep vector order.
+    name: "none"           # exp 3.4: none matched every re-ranker on quality and saved ~0.6 s/question.
+                           # Runner-up: "BAAI/bge-reranker-base" with rag.reranker.min_score -8.0
+  judge:                   # evaluation only (tests/evals): grades RAG answers.
+    name: "gpt-4o"         # Stronger than, and different from, models.rag, so
+    temperature: 0         # the answer model never grades its own work.
 
-chat_history_config:
-  max_history_pairs: 2
-  max_characters: 1000
-  max_tokens: 2000
+prompts:
+  rag_system_role: "You are a helpful assistant. Use the following context to answer the question."
 
-agent_config:
-  max_function_calls: 3
+agent:
+  max_tool_rounds: 10      # agent → tools round-trips allowed per user message
 
-vectordb_config:
-  collection_name: "chat_history"
-  embedding_model: "text-embedding-3-small" 
-  k: 3
+# RAG pipeline tunables — the ONE place to change them. Each experiment in the
+# golden-set evaluation (tests/evals/eval_golden.py) is a one-line edit here.
+rag:
+  chunking:                # changing these requires re-indexing
+    chunk_size: 800        # characters per chunk
+    chunk_overlap: 100     # characters shared by neighbouring chunks (< chunk_size)
+    strategy: "table_aware"  # recursive | table_aware (split tables by row, repeat caption + header).
+                           # exp 3.1: table questions 2/4 → 4/4; 800 beat 400 and 1200
+  indexing:
+    embedding_batch_size: 500   # chunks per embedding API call (OpenAI max 2,048)
+  retrieval:
+    top_k: 10              # candidates fetched by vector search (recall). exp 3.3: same quality as 30, much faster
+    top_n: 5               # chunks sent to the LLM (precision). exp 3.3: same quality as 8, cheaper
+    fallback_policy: "hybrid"   # gate rejected everything: hybrid | fail_open | fail_closed
+  reranker:
+    min_score: 0.15        # relevance gate (raw logit scale; unused with reranker "none"). Re-tune it
+                           # per model: tests/evals/sweep_reranker_threshold.py
+    device: "cpu"          # "cuda" is used automatically when available
+    batch_size: 8          # (query, chunk) pairs scored per forward pass
+    blend_with_vector_score: false
+    blend_alpha: 0.5       # final = alpha * rerank + (1 - alpha) * vector, when blending

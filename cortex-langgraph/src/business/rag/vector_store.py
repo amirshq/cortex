@@ -1,222 +1,35 @@
-"""Chroma vector store wrapper.
+"""RAG vector store factory — LangChain edition.
 
-For production RAG/chatbot systems you may prefer managed vector DBs
-like Weaviate or Pinecone. Chroma is used here for simplicity; swap it
-out for scalability/performance in production.
+cortex-core defined its own `VectorStoreBase` (reset/upsert/query) with two
+hand-written backends, and the Azure one had to translate Azure Search's
+response into Chroma's nested-list dict shape because retrieval.py parsed that
+exact structure.
+
+LangChain's `VectorStore` is a common interface, so none of that is needed:
+both backends return `(Document, score)` pairs from
+`similarity_search_with_score()`, and they embed text themselves given an
+`Embeddings` object.
+
+For production RAG systems you may prefer a managed vector DB. Chroma is the
+default for simplicity; Azure AI Search is the cloud alternative.
 """
 
 from __future__ import annotations
 
 import os
-from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
-import chromadb
-from chromadb.utils import embedding_functions
+from typing import Optional
 
+from chromadb.config import Settings
+from langchain_core.embeddings import Embeddings
+from langchain_core.vectorstores import VectorStore
 
-class VectorStoreBase(ABC):
-    """Interface every RAG vector store backend must implement."""
+DEFAULT_COLLECTION = "pdf_chunks"
 
-    @abstractmethod
-    def reset(self) -> None: ...
-
-    @abstractmethod
-    def upsert(
-        self,
-        ids: List[str],
-        embeddings: List[List[float]],
-        metadatas: List[Dict[str, Any]],
-        documents: List[str],
-    ) -> None: ...
-
-    @abstractmethod
-    def query(self, query_embedding: List[float], top_k: int = 15): ...
-
-
-class ChromaVectorStore(VectorStoreBase):
-    def __init__(self, persist_dir: str, collection_name: str = "pdf_chunks", dim: int | None = None):
-        self.client = chromadb.PersistentClient(path=persist_dir)
-        self.collection = self.client.get_or_create_collection(
-            name=collection_name,
-            embedding_function=None,  # we supply embeddings manually
-        )
-        self.dim = dim
-
-    def reset(self):
-        self.client.delete_collection(self.collection.name)
-        self.collection = self.client.get_or_create_collection(self.collection.name)
-
-    def upsert(
-        self,
-        ids: List[str],
-        embeddings: List[List[float]],
-        metadatas: List[Dict[str, Any]],
-        documents: List[str],
-    ):
-        # check the lengths matches for ids, embeddings, metadatas, documents
-        if len(ids) != len(embeddings):
-            raise ValueError("ids and embeddings length mismatch")
-        self.collection.upsert(
-            ids=ids,
-            embeddings=embeddings,
-            metadatas=metadatas,
-            documents=documents,
-        )
-    # Run the similarity search and return top_k results
-    def query(self, query_embedding: List[float], top_k: int = 15):
-        return self.collection.query(
-            query_embeddings=[query_embedding],
-            n_results=top_k,
-            include=["documents", "metadatas", "distances"],
-        )
-
-
-# Backward-compat alias — existing code imports `VectorStore` directly.
-VectorStore = ChromaVectorStore
-
-
-class AzureSearchVectorStore(VectorStoreBase):
-    """Azure AI Search-backed vector store for RAG chunks — same interface as
-    ChromaVectorStore, backed by a cloud vector index instead of local Chroma.
-
-    Creates the index on first use if it doesn't already exist yet. reset()
-    drops and recreates the index, matching ChromaVectorStore.reset()'s
-    "wipe to an empty collection" semantics exactly.
-
-    The `azure-search-documents` SDK is imported lazily (inside methods, not
-    at module level) so on-prem/Chroma-only deployments never need it installed.
-    """
-
-    INDEX_FIELDS_METADATA_KEYS = ("source_id", "section", "chunk_start", "chunk_end", "chunk_strategy")
-
-    def __init__(
-        self,
-        endpoint: str,
-        api_key: str,
-        index_name: str = "rag-chunks",
-        dim: int = 1536,
-    ):
-        from azure.core.credentials import AzureKeyCredential
-        from azure.core.exceptions import ResourceNotFoundError
-        from azure.search.documents import SearchClient
-        from azure.search.documents.indexes import SearchIndexClient
-        from azure.search.documents.indexes.models import (
-            HnswAlgorithmConfiguration,
-            SearchField,
-            SearchFieldDataType,
-            SearchIndex,
-            SimpleField,
-            VectorSearch,
-            VectorSearchProfile,
-        )
-
-        self._ResourceNotFoundError = ResourceNotFoundError
-        self._SearchIndex = SearchIndex
-        self.endpoint = endpoint
-        self.index_name = index_name
-        self.dim = dim
-
-        credential = AzureKeyCredential(api_key)
-        self._index_client = SearchIndexClient(endpoint=endpoint, credential=credential)
-        self._search_client = SearchClient(endpoint=endpoint, index_name=index_name, credential=credential)
-
-        algorithm_name = "rag-hnsw"
-        profile_name = "rag-vector-profile"
-        self._vector_search = VectorSearch(
-            algorithms=[HnswAlgorithmConfiguration(name=algorithm_name)],
-            profiles=[VectorSearchProfile(name=profile_name, algorithm_configuration_name=algorithm_name)],
-        )
-        self._fields = [
-            SimpleField(name="id", type=SearchFieldDataType.STRING, key=True),
-            SearchField(name="content", type=SearchFieldDataType.STRING, searchable=True),
-            SearchField(
-                name="embedding",
-                type="Collection(Edm.Single)",
-                searchable=True,
-                vector_search_dimensions=dim,
-                vector_search_profile_name=profile_name,
-            ),
-            SimpleField(name="source_id", type=SearchFieldDataType.STRING, filterable=True),
-            SimpleField(name="section", type=SearchFieldDataType.STRING, filterable=True),
-            SimpleField(name="chunk_start", type=SearchFieldDataType.INT32, filterable=True),
-            SimpleField(name="chunk_end", type=SearchFieldDataType.INT32, filterable=True),
-            SimpleField(name="chunk_strategy", type=SearchFieldDataType.STRING, filterable=True),
-        ]
-
-        self._ensure_index_exists()
-
-    def _ensure_index_exists(self) -> None:
-        try:
-            self._index_client.get_index(self.index_name)
-        except self._ResourceNotFoundError:
-            self._index_client.create_index(
-                self._SearchIndex(name=self.index_name, fields=self._fields, vector_search=self._vector_search)
-            )
-
-    def reset(self) -> None:
-        try:
-            self._index_client.delete_index(self.index_name)
-        except self._ResourceNotFoundError:
-            pass
-        self._index_client.create_index(
-            self._SearchIndex(name=self.index_name, fields=self._fields, vector_search=self._vector_search)
-        )
-
-    def upsert(
-        self,
-        ids: List[str],
-        embeddings: List[List[float]],
-        metadatas: List[Dict[str, Any]],
-        documents: List[str],
-    ) -> None:
-        if len(ids) != len(embeddings):
-            raise ValueError("ids and embeddings length mismatch")
-
-        docs = []
-        for doc_id, embedding, metadata, text in zip(ids, embeddings, metadatas, documents):
-            metadata = metadata or {}
-            docs.append({
-                "id": doc_id,
-                "content": text,
-                "embedding": embedding,
-                "source_id": str(metadata.get("source_id", "")),
-                "section": str(metadata.get("section", "")),
-                "chunk_start": int(metadata.get("chunk_start", 0)),
-                "chunk_end": int(metadata.get("chunk_end", 0)),
-                "chunk_strategy": str(metadata.get("chunk_strategy", "")),
-            })
-        self._search_client.merge_or_upload_documents(documents=docs)
-
-    def query(self, query_embedding: List[float], top_k: int = 15):
-        from azure.search.documents.models import VectorizedQuery
-
-        vector_query = VectorizedQuery(vector=query_embedding, k_nearest_neighbors=top_k, fields="embedding")
-        results = self._search_client.search(search_text=None, vector_queries=[vector_query], top=top_k)
-
-        ids: List[str] = []
-        docs: List[str] = []
-        metas: List[Dict[str, Any]] = []
-        scores: List[float] = []
-        for r in results:
-            ids.append(r["id"])
-            docs.append(r.get("content", ""))
-            metas.append({key: r.get(key) for key in self.INDEX_FIELDS_METADATA_KEYS})
-            # Azure Search's vector-query score is a similarity score (higher =
-            # better); Chroma's "distances" are a distance (lower = better).
-            # Negate it so "lower is better" holds for both backends — nothing
-            # downstream treats this as a calibrated distance, it's only ever
-            # used for display and (already-sorted) ordering.
-            scores.append(-float(r.get("@search.score", 0.0)))
-
-        # Match ChromaVectorStore.query()'s response shape exactly (outer list
-        # = batch of queries; we only ever send one) since retrieval.py's
-        # _retrieve() depends on this exact structure regardless of backend.
-        return {
-            "ids": [ids],
-            "documents": [docs],
-            "metadatas": [metas],
-            "distances": [scores],
-        }
+# Different default from cortex-core's "rag-chunks": LangChain's AzureSearch
+# uses its own index schema (id, content, content_vector, metadata), which is
+# not compatible with the index cortex-core creates. Distinct names mean the
+# two projects can share one Azure Search service without clobbering each other.
+DEFAULT_AZURE_INDEX = "rag-chunks-langchain"
 
 
 # ── Provider selection ────────────────────────────────────────────────────
@@ -225,37 +38,111 @@ class AzureSearchVectorStore(VectorStoreBase):
 # Defaults to today's behavior — on-prem/local deployments don't need to
 # set anything.
 #
-#   chroma        (default) — local Chroma persistence.
-#   azure_search  — Azure AI Search (vector search). Requires
+#   chroma        (default) — langchain_chroma.Chroma, local persistence.
+#   azure_search  — langchain_azure_ai AzureSearch. Requires
 #                   AZURE_SEARCH_ENDPOINT, AZURE_SEARCH_API_KEY, and
-#                   optionally AZURE_SEARCH_INDEX_NAME (see .env).
+#                   optionally AZURE_SEARCH_INDEX_NAME / AZURE_SEARCH_EMBEDDING_DIM.
+
+def _provider(provider: Optional[str]) -> str:
+    return (provider or os.getenv("VECTOR_STORE_PROVIDER", "chroma")).strip().lower()
+
 
 def create_vector_store(
     persist_dir: str,
-    collection_name: str = "pdf_chunks",
+    collection_name: str = DEFAULT_COLLECTION,
     provider: Optional[str] = None,
-    dim: Optional[int] = None,
-) -> VectorStoreBase:
-    """Factory for the RAG vector store, selected by VECTOR_STORE_PROVIDER or `provider`."""
-    provider = (provider or os.getenv("VECTOR_STORE_PROVIDER", "chroma")).strip().lower()
+    embedding: Optional[Embeddings] = None,
+) -> VectorStore:
+    """Factory for the RAG vector store, selected by VECTOR_STORE_PROVIDER or `provider`.
+
+    embedding: the model used to embed chunks and queries. Defaults to
+    config.yml → models.rag_embedding — it must be the same model at index and
+    query time, so changing it requires re-indexing.
+    """
+    provider = _provider(provider)
+    if provider not in ("chroma", "azure_search"):
+        raise ValueError(
+            f"Unknown VECTOR_STORE_PROVIDER={provider!r}. Supported: chroma, azure_search."
+        )
+
+    if embedding is None:
+        from src.business.core.embedding import create_embedder
+
+        embedding = create_embedder(role="rag_embedding")
 
     if provider == "chroma":
-        return ChromaVectorStore(persist_dir=persist_dir, collection_name=collection_name)
+        return _chroma(persist_dir, collection_name, embedding)
+
+    endpoint, api_key, index_name = _azure_settings()
+    # Imported lazily so Chroma-only deployments never load the Azure SDK.
+    from langchain_azure_ai.vectorstores import AzureSearch
+
+    return AzureSearch(
+        azure_search_endpoint=endpoint,
+        azure_search_key=api_key,
+        index_name=index_name,
+        embedding_function=embedding,
+        # Passing the dimension up front stops AzureSearch from embedding a
+        # probe string (a paid API call) just to discover it. The index is
+        # created on first use if it doesn't exist.
+        vector_search_dimensions=int(os.getenv("AZURE_SEARCH_EMBEDDING_DIM", "1536")),
+    )
+
+
+def reset_vector_store(
+    persist_dir: str,
+    collection_name: str = DEFAULT_COLLECTION,
+    provider: Optional[str] = None,
+) -> None:
+    """Wipe the RAG index to empty.
+
+    Upserts never delete, so stale chunks from a previous upload would
+    otherwise keep matching queries. Needs no embedding model.
+    """
+    provider = _provider(provider)
+
+    if provider == "chroma":
+        _chroma(persist_dir, collection_name, embedding=None).reset_collection()
+        return
 
     if provider == "azure_search":
-        endpoint = os.getenv("AZURE_SEARCH_ENDPOINT")
-        api_key = os.getenv("AZURE_SEARCH_API_KEY")
-        index_name = os.getenv("AZURE_SEARCH_INDEX_NAME", "rag-chunks")
-        if not endpoint or not api_key:
-            raise RuntimeError(
-                "VECTOR_STORE_PROVIDER=azure_search requires AZURE_SEARCH_ENDPOINT "
-                "and AZURE_SEARCH_API_KEY."
-            )
-        resolved_dim = dim or int(os.getenv("AZURE_SEARCH_EMBEDDING_DIM", "1536"))
-        return AzureSearchVectorStore(
-            endpoint=endpoint, api_key=api_key, index_name=index_name, dim=resolved_dim
-        )
+        endpoint, api_key, index_name = _azure_settings()
+        from azure.core.credentials import AzureKeyCredential
+        from azure.core.exceptions import ResourceNotFoundError
+        from azure.search.documents.indexes import SearchIndexClient
+
+        client = SearchIndexClient(endpoint=endpoint, credential=AzureKeyCredential(api_key))
+        try:
+            # AzureSearch recreates the index on its next construction.
+            client.delete_index(index_name)
+        except ResourceNotFoundError:
+            pass
+        return
 
     raise ValueError(
         f"Unknown VECTOR_STORE_PROVIDER={provider!r}. Supported: chroma, azure_search."
     )
+
+
+def _chroma(persist_dir: str, collection_name: str, embedding: Optional[Embeddings]) -> VectorStore:
+    from langchain_chroma import Chroma
+
+    return Chroma(
+        collection_name=collection_name,
+        embedding_function=embedding,
+        persist_directory=persist_dir,
+        client_settings=Settings(anonymized_telemetry=False, is_persistent=True,
+                                 persist_directory=persist_dir),
+    )
+
+
+def _azure_settings() -> tuple[str, str, str]:
+    endpoint = os.getenv("AZURE_SEARCH_ENDPOINT")
+    api_key = os.getenv("AZURE_SEARCH_API_KEY")
+    index_name = os.getenv("AZURE_SEARCH_INDEX_NAME", DEFAULT_AZURE_INDEX)
+    if not endpoint or not api_key:
+        raise RuntimeError(
+            "VECTOR_STORE_PROVIDER=azure_search requires AZURE_SEARCH_ENDPOINT "
+            "and AZURE_SEARCH_API_KEY."
+        )
+    return endpoint, api_key, index_name

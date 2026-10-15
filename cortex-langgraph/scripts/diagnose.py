@@ -38,8 +38,8 @@ for col in collections:
 # 3. Check embedder
 print("\n3. Testing embedder...")
 try:
-    from src.business.core.embedding import OpenAIEmbedder
-    embedder = OpenAIEmbedder(api_key=api_key)
+    from src.business.core.embedding import create_embedder
+    embedder = create_embedder(api_key=api_key)
     result = embedder.embed_query("test query")
     print(f"   Embedding dimension: {len(result)}")
     print(f"   First 5 values: {result[:5]}")

@@ -28,6 +28,11 @@ class EmbeddingPricing:
 # OpenAI pricing (as of 2024-09, subject to change)
 OPENAI_MODELS = {
     "gpt-4o": ModelPricing("gpt-4o", input_tokens_per_1m=5.0, output_tokens_per_1m=15.0),
+    # models.rag in config.yml — was missing, so RAG answers were costed at $0.
+    "gpt-4o-mini": ModelPricing("gpt-4o-mini", input_tokens_per_1m=0.15, output_tokens_per_1m=0.60),
+    "gpt-4.1": ModelPricing("gpt-4.1", input_tokens_per_1m=2.0, output_tokens_per_1m=8.0),
+    "gpt-4.1-mini": ModelPricing("gpt-4.1-mini", input_tokens_per_1m=0.40, output_tokens_per_1m=1.60),
+    "gpt-4.1-nano": ModelPricing("gpt-4.1-nano", input_tokens_per_1m=0.10, output_tokens_per_1m=0.40),
     "gpt-4-turbo": ModelPricing("gpt-4-turbo", input_tokens_per_1m=10.0, output_tokens_per_1m=30.0),
     "gpt-4": ModelPricing("gpt-4", input_tokens_per_1m=30.0, output_tokens_per_1m=60.0),
     "gpt-3.5-turbo": ModelPricing("gpt-3.5-turbo", input_tokens_per_1m=0.5, output_tokens_per_1m=1.5),
@@ -42,6 +47,7 @@ EMBEDDING_MODELS = {
 # Azure OpenAI pricing (as of 2024, region-dependent; using US East pricing)
 AZURE_OPENAI_MODELS = {
     "gpt-4o": ModelPricing("gpt-4o", input_tokens_per_1m=5.0, output_tokens_per_1m=15.0),
+    "gpt-4o-mini": ModelPricing("gpt-4o-mini", input_tokens_per_1m=0.15, output_tokens_per_1m=0.60),
     "gpt-4-turbo": ModelPricing("gpt-4-turbo", input_tokens_per_1m=10.0, output_tokens_per_1m=30.0),
     "gpt-35-turbo": ModelPricing("gpt-35-turbo", input_tokens_per_1m=0.5, output_tokens_per_1m=1.5),
 }

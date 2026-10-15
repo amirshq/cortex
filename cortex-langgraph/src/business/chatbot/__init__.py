@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict
 
 from dotenv import load_dotenv
 
@@ -35,16 +35,6 @@ def _resolve(relative_path: str) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Minimal chunker — conversation pairs are stored whole, so we never need
-# to split them.  Only used by LongTermMemory.remember(); the chatbot path
-# always calls remember_conversation() which skips chunking.
-# ---------------------------------------------------------------------------
-class _IdentityChunker:
-    def split(self, text: str) -> List[str]:
-        return [text]
-
-
-# ---------------------------------------------------------------------------
 # Dependency factory
 # ---------------------------------------------------------------------------
 def _make_chatbot(user_id: str) -> AgenticChatbot:
@@ -61,16 +51,15 @@ def _make_chatbot(user_id: str) -> AgenticChatbot:
     # SQLite path — anchored to project root
     db_path = _resolve(os.getenv("SQLITE_DB_PATH") or dirs.get("db_path", "data/chatbot.db"))
 
-    vectordb = create_conversation_vector_store(
+    # The vector store embeds text itself, so the embedder is handed to it
+    # rather than to LongTermMemory (which is where cortex-core put it).
+    embedder = create_embedder(api_key=api_key)
+    vectorstore = create_conversation_vector_store(
         collection_name="chat_history",
+        embedding=embedder,
         persist_directory=str(vectordb_dir),
     )
-    embedder = create_embedder(api_key=api_key)
-    long_term_memory = LongTermMemory(
-        vectordb=vectordb,
-        embedder=embedder,
-        chunker=_IdentityChunker(),
-    )
+    long_term_memory = LongTermMemory(vectorstore=vectorstore)
     redis_memory = create_memory(url=redis_url)
     chat_history_manager = ChatHistoryManager(db_path=str(db_path))
 
@@ -95,10 +84,16 @@ async def process_chat_message(request: ChatMessageRequest) -> Dict:
         session_id=session_id,
     )
 
+    # LangChain reports token usage on every model response, so — unlike
+    # cortex-core, which always returned tokens_used=None — the controller now
+    # receives real counts and its cost-tracking branch actually runs.
+    usage = chatbot.last_usage
     return {
         "reply": reply,
-        "model_used": "gpt-4o",
-        "tokens_used": None,
+        "model_used": chatbot.model_name,
+        "tokens_used": usage.get("total_tokens") or None,
+        "input_tokens": usage.get("input_tokens", 0),
+        "output_tokens": usage.get("output_tokens", 0),
     }
 
 

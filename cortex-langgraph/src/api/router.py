@@ -20,6 +20,9 @@ from src.database.dto import (
     RAGQueryRequest,
     RAGQueryResponse,
     RAGUploadResponse,
+    RAGDocumentsResponse,
+    RAGHistoryResponse,
+    RAGHistoryClearResponse,
 )
 from src.api.controller import chat_controller, rag_controller
 from src.api.metrics import RATE_LIMIT_REJECTIONS_TOTAL
@@ -103,6 +106,24 @@ async def rag_query_endpoint(request: RAGQueryRequest):
 async def rag_upload_endpoint(file: UploadFile = File(...)):
     """Upload a PDF and (re-)build the RAG vector index."""
     return await rag_controller.upload(file)
+
+
+@router.get("/rag/documents", response_model=RAGDocumentsResponse)
+async def rag_documents_endpoint():
+    """List the PDFs currently in the RAG index."""
+    return rag_controller.documents()
+
+
+@router.get("/rag/history", response_model=RAGHistoryResponse)
+async def rag_history_endpoint(user_id: int):
+    """A user's saved PDF questions and answers, oldest first."""
+    return rag_controller.history(user_id)
+
+
+@router.delete("/rag/history", response_model=RAGHistoryClearResponse)
+async def rag_clear_history_endpoint(user_id: int):
+    """Delete a user's saved PDF questions and answers."""
+    return rag_controller.clear_history(user_id)
 
 
 # Example showing the difference:

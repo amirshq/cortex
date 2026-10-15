@@ -1,73 +1,83 @@
-# PDF Ingestion Pipeline
+# PDF Ingestion Pipeline — LangChain edition
 
 PDF parsing runs on [Docling](https://github.com/docling-project/docling), IBM's open-source
-document conversion library. Docling handles layout detection, OCR, and table structure
-recognition entirely locally — no external API, no API key, and no per-page cost. This
-replaced an earlier two-stage pipeline (the `unstructured` library plus a paid Unstructured
-API call for table OCR).
+document conversion library. It does layout detection, OCR (RapidOCR) and table structure
+recognition entirely locally, with no external API, no API key and no per-page cost.
 
-This module extracts both text content and table data from PDF documents for use in the
-RAG (Retrieval-Augmented Generation) pipeline.
+In cortex-langgraph, Docling is driven through LangChain's
+[`DoclingLoader`](https://github.com/docling-project/docling-langchain), which yields LangChain
+`Document`s. A `Document` is the unit every other LangChain component consumes: splitters,
+vector stores and retrievers.
 
 ## Overview
 
-Docling converts a PDF into a single structured `DoclingDocument` in one pass:
-
 ```
-PDF Document
+PDFs in data_dir (recursive)
     ↓
-DocumentConverter().convert()
+DoclingLoader (export_type=MARKDOWN)          pdf_digest.py
+    ├── cleaning: keep title / section header / text / paragraph / list item / table;
+    │             page headers, footers, footnotes, captions and image placeholders dropped
+    ├── tables:   exported inline as Markdown, where they appear in the document
+    └── metadata: CortexMetaExtractor → source, source_id, page_count, table_count
     ↓
-DoclingDocument
-    ├── .texts   → section headers, narrative text, list items
-    └── .tables  → table structure, exported directly to Markdown
+one Document per PDF, trimmed to max_context_chars
     ↓
-Combined, budget-trimmed text
+RecursiveCharacterTextSplitter (800 / 100)    chunk.py
+    ├── cuts on paragraph → line → sentence → word boundaries
+    ├── chunk_start / chunk_end offsets, chunk_strategy, section ("table" | "text")
+    └── stable sha1 chunk id → Document.id
     ↓
-Chunk → embed → store in Chroma
+VectorStore.add_documents(ids=...)            ../index_builder.py (embeds + upserts, batches of 50)
 ```
 
 ## Components
 
 ### `pdf_digest.py`
 
-The only module in this package. Responsibilities:
-
-- Converts a PDF with `docling.document_converter.DocumentConverter`
-- Filters `doc.texts` down to useful categories (`section_header`, `title`, `text`, `list_item`)
-- Exports each `doc.tables` entry to Markdown via `table.export_to_markdown(doc)`
-- Combines text + tables into one string, trimmed to `max_context_chars` (tables are
-  always kept in full; body text is trimmed to fit whatever budget remains)
+- `build_pdf_loader(paths, include_table_images, pdf_strategy)` configures the `DoclingLoader`.
+- `load_pdf_documents(data_dir, max_context_chars, ...)` returns `List[Document]`, one per PDF.
+- `CortexMetaExtractor` handles document-level metadata enrichment.
 
 **Key options** (both map onto Docling's `PdfPipelineOptions`):
-- `pdf_strategy`: `"hi_res"` (OCR on — needed for scanned pages, default) | `"fast"` (OCR off, faster, text-layer only)
-- `include_table_images`: whether to run Docling's table structure recognition (`do_table_structure`)
+- `pdf_strategy`: `"hi_res"` (OCR on, needed for scanned pages; the default) or `"fast"`
+  (OCR off, text layer only).
+- `include_table_images`: whether to run table structure recognition and keep tables in the
+  text.
+
+### `chunk.py`
+
+- `split_documents(documents, chunk_size=800, overlap=100)` returns chunk `Document`s with ids.
+- `is_table_chunk(text)` returns true when most of a chunk's lines are Markdown table rows.
+- `build_chunk_id(text, start, metadata)` gives the same PDF + offset + text the same id, so
+  re-indexing upserts in place instead of duplicating chunks.
 
 **Usage:**
 ```python
-from src.business.rag.pdfingest.pdf_digest import ingest_directory
+from src.business.rag.pdfingest.pdf_digest import load_pdf_documents
+from src.business.rag.pdfingest.chunk import split_documents
 
-docs = ingest_directory(data_dir=Path("src/business/rag/data"))
+chunks = split_documents(load_pdf_documents(Path("src/business/rag/data")))
 ```
 
-Or via the CLI wrapper:
+Or via the CLI wrapper (from the project root, with this project's venv):
 ```bash
-python scripts/index_cli.py rebuild --data-dir src/business/rag/data
+.venv/bin/python scripts/index_cli.py --data-dir src/business/rag/data
 ```
 
-## Dependencies
+## Differences from cortex-core
 
-- **docling** — PDF parsing, layout, OCR, and table extraction (all local)
-  ```bash
-  pip install docling
-  ```
-- **openai** — embeddings and chat generation
-- **python-dotenv** — environment variable management
-
-No `UNSTRUCTURED_API_KEY` or any other external API key is required for PDF ingestion.
+- Tables are **inline**, next to the text that explains them. cortex-core appended all tables
+  after a "TABLES FROM DOCUMENT IMAGES" separator and tagged `section` by character offset.
+- Chunks end on natural boundaries instead of a fixed 800-character window.
+- Budget trimming is a plain cut of the Markdown. cortex-core kept every table in full and
+  trimmed only the body text. The API upload path uses a 500,000-character budget, so this
+  only matters for the CLI's 12,000 default.
 
 ## Limitations
 
-1. **Context limits**: Document text is truncated to a configurable character budget (default 12,000 chars; the API upload path uses 500,000 to fit entire papers including tables).
-2. **First-run latency**: Docling downloads its layout/table-structure models from the Hugging Face Hub on first use; subsequent runs use the local cache.
-3. **Language support**: OCR quality depends on Docling's bundled OCR engine (RapidOCR by default); non-English documents may need a different OCR language configuration.
+1. **Context limits**: document text is truncated to a character budget (12,000 chars by
+   default; the API upload path uses 500,000).
+2. **First-run latency**: Docling downloads its layout and table-structure models from the
+   Hugging Face Hub on first use; later runs use the local cache.
+3. **Language support**: OCR quality depends on Docling's bundled OCR engine (RapidOCR by
+   default). Non-English documents may need a different OCR language configuration.
